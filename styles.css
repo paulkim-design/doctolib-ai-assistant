@@ -39,8 +39,8 @@
   --border-hairline: 1px;
   --border-strong: 2px;
 
-  /* Confidence/AI signaling is text + dashed border only, per brief section 8: never color alone. */
-  --ai-boundary: var(--slate-700);
+  /* Confidence/AI signaling is text + border only, per brief section 8: never color alone. Matches the KI badge background. */
+  --ai-boundary: var(--slate-800);
 }
 
 * { box-sizing: border-box; }
@@ -110,6 +110,18 @@ button {
   border: var(--border-hairline) solid var(--divider);
   background: var(--white);
   color: var(--ink-black);
+}
+.proto-controls .toggle-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.proto-controls .toggle-field input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--blue-interactive);
+  cursor: pointer;
 }
 .proto-controls .frame-badge {
   margin-left: auto;
@@ -329,6 +341,30 @@ button {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Waiting: placeholder for the AI items that are still being checked */
+.item-card.skeleton { display: flex; flex-direction: column; gap: 10px; }
+.sk-row { display: flex; gap: 10px; align-items: center; padding-right: 34px; }
+.sk-box { width: 20px; height: 20px; border-radius: 4px; background: var(--divider); flex-shrink: 0; }
+.sk-bar { display: block; height: 10px; border-radius: 5px; background: var(--divider); position: relative; overflow: hidden; }
+.sk-indent { margin-left: 30px; }
+.sk-bar::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.75), transparent);
+  transform: translateX(-100%);
+  animation: shimmer 1.3s ease-in-out infinite;
+}
+@keyframes shimmer { to { transform: translateX(100%); } }
+
+/* Result arrives: framing and AI items fade in one after another */
+.arrive { animation: arrive 320ms ease-out both; animation-delay: calc(var(--i, 0) * 70ms); }
+@keyframes arrive { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .sk-bar::after { animation: none; }
+  .arrive { animation-name: arrive-fade; animation-delay: 0ms; }
+  @keyframes arrive-fade { from { opacity: 0; } to { opacity: 1; } }
+}
+
 .item-list {
   display: flex;
   flex-direction: column;
@@ -344,7 +380,7 @@ button {
   position: relative;
 }
 .item-card.ai {
-  border: 1.5px dashed var(--ai-boundary);
+  border: 1.5px solid var(--ai-boundary);
 }
 .item-card.done { opacity: 0.6; }
 .item-card.done .item-title { text-decoration: line-through; }
@@ -463,6 +499,7 @@ button {
   margin-bottom: 8px;
 }
 .note-row .text { font-size: 13.5px; color: var(--ink-black); line-height: 1.5; }
+.note-row .status { font-size: 12px; color: var(--text-subtle); margin-top: 4px; }
 .note-row .row-actions {
   display: flex;
   gap: 16px;
@@ -551,8 +588,8 @@ button {
   padding: 10px 20px 20px;
   max-height: 86%;
   overflow-y: auto;
-  animation: sheet-up 0.22s ease-out;
 }
+.sheet.enter { animation: sheet-up 0.22s ease-out; }
 @keyframes sheet-up { from { transform: translateY(16px); } to { transform: translateY(0); } }
 
 .sheet-handle {

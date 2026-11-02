@@ -13,22 +13,51 @@ Assistant" feature, built from:
 Open `index.html` directly in a browser, or serve the folder (e.g.
 `python3 -m http.server`) and visit it — either works, there's no backend.
 
-Use the **Szenario** dropdown at the top to jump straight into any of the 7
+Use the **State** dropdown at the top to jump straight into any of the 7
 checklist states (high/mixed/low confidence, no result, failure, cold start,
-generic type pick). The badge on the right names the matching Figma frame
-number for cross-reference.
+waiting). The **Generic appointment type** toggle next to it switches the
+appointment to a generic type ("Sprechstunde"): turning it on sends you
+through the entry row, consent (if not already given) and the type pick
+screen, where only "Gesundheits-Check-up" resolves to the State dropdown's
+selected state with real default items — every other pick, including "Ich
+bin mir nicht sicher", resolves to cold start regardless of the dropdown.
+Toggling that control, in either direction, resets the phone to the entry
+point (ticks, hidden items and notes), without touching consent. The badge on the
+right names the matching Figma frame number for cross-reference, with
+"· generic" appended while the toggle is on.
+
+The **Language** dropdown switches the phone between German (the product's
+default) and English, for testers who need to read and act on an English
+version. It translates everything on the phone: UI chrome (headings, labels,
+buttons) and the simulated content (item titles, quotes, patient notes,
+questions/answers) — see `fixtures.js`'s `_EN` fixture sets. Switching
+language, like the generic toggle, resets the phone to the entry point but
+keeps the current State selection, the generic toggle and consent. The
+reviewer control bar itself always stays in English, regardless of this
+switch.
 
 ## What's real vs. simulated
 
 This is a frontend prototype with **no live model calls** (per your choice).
 Concretely:
 
-- Checklist content for each scenario is the exact fixture payload from the
-  spec files — it never regenerates from what you type.
+- Checklist content for each scenario starts as the exact fixture payload
+  from the spec files, but a note you add or edit goes through a simulated
+  "AI extraction" step (see below) rather than just replaying the same
+  fixture — there's still no live NLP, so the rule is a simple literal text
+  match, not real understanding of what you typed.
 - Adding, editing or deleting a preparation note re-runs the "waiting" state
-  (per the brief) but then re-shows the same fixture payload — the notes
-  list itself is fully live (add/edit/delete, 5-note limit), only the AI
-  checklist content is static.
+  (per the brief); the notes list and the items derived from it are fully
+  live (add/edit/delete, 5-note limit).
+- Simulated note-to-item rule: typing (or picking the example chip for) "Das
+  in der Sprechstunde besprochene Medikament pausieren" or any other text
+  produces one patient item (title = the full note, action `do_or_avoid`,
+  band `high`). The other example chip, "Impfpass mitbringen", produces no
+  item — it repeats default item d3, so its note status reads "Steht schon
+  auf der allgemeinen Liste" instead. Editing a note replaces its item(s);
+  deleting one removes them. This doesn't run in failure (no notes section
+  shown there) or cold start (no model call — the note still shows, just
+  without a status line).
 - The question sheet has 5 example chips (one per answer state) that fill
   in the exact canned questions from the payload doc — tap one, then
   "Fragen" to see that exact answer state. Typing anything else resolves to
@@ -39,17 +68,15 @@ Concretely:
 
 ## Interpretations I made where the spec didn't fully pin something down
 
-- **Item ordering**: the brief's prose and the wireframe agree for
-  high/mixed confidence (practice → default → patient) but the wireframe
-  shows low confidence ordering practice → patient (unclear note) →
-  default. I followed the wireframe where prose was silent.
+- **Item ordering**: practice → default → patient, for every state. The
+  wireframe showed low confidence as practice → patient (unclear note) →
+  default, but the unclear note is no longer rendered as a checklist item at
+  all (it stays in the notes section instead), and a live-added item in low
+  confidence is a plain patient item like any other, so there's no longer a
+  case where low confidence's patient bucket needs its own position.
 - **"Warum sehe ich das?" sheet**: has no dedicated wireframe frame, but
   full copy exists in the brief (§5/§6). Built as a bottom sheet matching
   the note composer's pattern.
-- **Post-type-pick result**: no fixture is specified for what a generic
-  appointment resolves to after a type is picked. Picking "Ich bin mir
-  nicht sicher" correctly goes to cold start (per spec); any other pick
-  resolves to the mixed-confidence fixture as a representative result.
 - **Cold start + notes**: "no model call" is taken literally — adding a
   note while in cold start updates the notes list but never shows a
   waiting spinner or changes the screen, since there's no practice source
@@ -60,5 +87,6 @@ Concretely:
 - `index.html` — shell, Google Fonts (Montserrat/Roboto), scenario switcher
 - `styles.css` — design tokens from `DesignSystem/tokens.json`, components
 - `fixtures.js` — appointment contexts + checklist/answer payloads, verbatim
+  German from the spec files plus a hand-translated English mirror
 - `app.js` — state machine, rendering, interactions
 - `assets/` — Doctolib wordmark + doctor avatar, copied from `DesignSystem/`
