@@ -275,49 +275,186 @@ const ANSWER_PAYLOADS_EN = {
   }
 };
 
-// One lookup per language, read via fx() (app.js sets `lang`). Keeps every
-// language-dependent fixture reference in one place instead of scattering
-// "if lang === ..." checks through buildScenario and app.js.
-const FIXTURE_SETS = {
-  de: {
-    contextBase: CONTEXT_BASE,
-    noteN1: NOTE_N1,
-    noteN2: NOTE_N2,
-    typeOptions: TYPE_OPTIONS,
-    noteExamples: NOTE_EXAMPLES,
-    defaultItemsBase: DEFAULT_ITEMS_BASE,
-    checklistPayloads: CHECKLIST_PAYLOADS,
-    answerPayloads: ANSWER_PAYLOADS
-  },
-  en: {
-    contextBase: CONTEXT_BASE_EN,
-    noteN1: NOTE_N1_EN,
-    noteN2: NOTE_N2_EN,
-    typeOptions: TYPE_OPTIONS_EN,
-    noteExamples: NOTE_EXAMPLES_EN,
-    defaultItemsBase: DEFAULT_ITEMS_BASE_EN,
-    checklistPayloads: CHECKLIST_PAYLOADS_EN,
-    answerPayloads: ANSWER_PAYLOADS_EN
+/* ------------------------- Second appointment: MRT Knie ------------------------- */
+/*
+  Added verbatim from the reviewer's spec. This appointment only ever
+  resolves to "high_confidence" — there is no mixed/low/no-result/failure/
+  cold-start/waiting fixture for it, and buildScenario() below clamps to
+  "high_confidence" whenever this appointment is active.
+*/
+
+const MRT_CONTEXT_BASE = {
+  patient_display_name: "Lena Brückner",
+  appointment_datetime: "2027-06-14T08:30",
+  practice_name: "Radiologie am Musterplatz",
+  practice_contact_lines: ["Musterplatz 5, 10115 Berlin"],
+  appointment_type: "MRT Knie",
+  appointment_type_is_generic: false,
+  type_options: [],
+  patient_type_pick: null
+};
+
+const MRT_CONTEXT_BASE_EN = {
+  patient_display_name: "Lena Brückner",
+  appointment_datetime: "2027-06-14T08:30",
+  practice_name: "Musterplatz Radiology",
+  practice_contact_lines: ["Musterplatz 5, 10115 Berlin"],
+  appointment_type: "Knee MRI",
+  appointment_type_is_generic: false,
+  type_options: [],
+  patient_type_pick: null
+};
+
+const MRT_DEFAULT_ITEMS = [
+  { id: "d1", title: "Versichertenkarte mitbringen", action: "bring" },
+  { id: "d2", title: "Überweisung mitbringen", action: "bring" },
+  { id: "d3", title: "Schmuck und Uhren möglichst zu Hause lassen", action: "do_or_avoid" }
+];
+
+const MRT_DEFAULT_ITEMS_EN = [
+  { id: "d1", title: "Bring your insurance card", action: "bring" },
+  { id: "d2", title: "Bring your referral", action: "bring" },
+  { id: "d3", title: "Leave jewelry and watches at home if possible", action: "do_or_avoid" }
+];
+
+const MRT_CHECKLIST_PAYLOADS = {
+  high_confidence: {
+    state: "high_confidence",
+    framing: "Das hat Ihre Praxis für diese Terminart angegeben.",
+    error_code: null,
+    results: [
+      { id: "r1", title: "Überweisung im Original mitbringen, keine Kopie und kein Foto", source: "practice", action: "bring", band: "high", confidence: 0.87, source_quote: "Bitte bringen Sie Überweisungen immer im Original mit, Kopien oder Fotos davon können wir leider nicht annehmen." },
+      { id: "r2", title: "Frühere Aufnahmen der Region auf CD oder mit QR-Code mitbringen", source: "practice", action: "bring", band: "high", confidence: 0.78, source_quote: "Wenn Sie von derselben Region bereits Aufnahmen aus einer anderen Praxis haben, bringen Sie diese bitte auf CD oder mit dem QR-Code Ihres Bildbefunds mit." },
+      { id: "r3", title: "Aufklärungsbogen zur MRT vorab über Doctolib ausfüllen", source: "practice", action: "fill_in", band: "high", confidence: 0.83, source_quote: "Den Aufklärungsbogen zur MRT-Untersuchung können Sie vorab über Doctolib ausfüllen, dann verkürzt sich Ihre Wartezeit vor Ort." },
+      { id: "r4", title: "Kleidung ohne Metallteile tragen, zum Beispiel ohne Reißverschluss", source: "practice", action: "do_or_avoid", band: "high", confidence: 0.81, source_quote: "Tragen Sie am besten bequeme Kleidung ohne Metallteile, zum Beispiel ohne Reißverschluss oder Nieten, dann müssen Sie sich vor der Untersuchung nicht umziehen." }
+    ]
   }
 };
 
-// Reads the active language's fixture set. `lang` is declared in app.js;
-// this is only ever called at runtime (after app.js has set it), never at
-// script load time, so the load order of the two files doesn't matter.
+const MRT_CHECKLIST_PAYLOADS_EN = {
+  high_confidence: {
+    state: "high_confidence",
+    framing: "This is what your practice provided for this appointment type.",
+    error_code: null,
+    results: [
+      { id: "r1", title: "Bring the original referral, not a copy or photo", source: "practice", action: "bring", band: "high", confidence: 0.87, source_quote: "Please always bring referrals in the original; unfortunately we can't accept copies or photos of them." },
+      { id: "r2", title: "Bring previous scans of the area on a CD or with the QR code", source: "practice", action: "bring", band: "high", confidence: 0.78, source_quote: "If you already have scans of the same area from another practice, please bring them on CD or with the QR code of your imaging report." },
+      { id: "r3", title: "Fill in the MRI information form via Doctolib beforehand", source: "practice", action: "fill_in", band: "high", confidence: 0.83, source_quote: "You can fill in the information form for the MRI examination via Doctolib beforehand; this will shorten your waiting time on site." },
+      { id: "r4", title: "Wear clothing without metal parts, for example without a zipper", source: "practice", action: "do_or_avoid", band: "high", confidence: 0.81, source_quote: "It's best to wear comfortable clothing without metal parts, for example without a zipper or studs, so you won't need to change before the examination." }
+    ]
+  }
+};
+
+// The parking and dizziness questions are appointment-independent, so MRT
+// reuses the check-up's objects verbatim. Water/coffee/error belong to the
+// check-up and are deliberately left out.
+const MRT_ANSWER_PAYLOADS = {
+  answered: {
+    state: "answered",
+    question: "Brauche ich für das MRT eine Überweisung?",
+    answer: "Ja. Ihre Praxis schreibt, dass Sie Überweisungen immer im Original mitbringen sollen. Kopien oder Fotos davon werden nicht angenommen.",
+    source: "practice",
+    source_quote: "Bitte bringen Sie Überweisungen immer im Original mit, Kopien oder Fotos davon können wir leider nicht annehmen.",
+    error_code: null
+  },
+  no_answer: ANSWER_PAYLOADS.no_answer,
+  refused_symptom: ANSWER_PAYLOADS.refused_symptom
+};
+
+const MRT_ANSWER_PAYLOADS_EN = {
+  answered: {
+    state: "answered",
+    question: "Do I need a referral for the MRI?",
+    answer: "Yes. Your practice says you should always bring referrals in the original. Copies or photos of them won't be accepted.",
+    source: "practice",
+    source_quote: "Please always bring referrals in the original; unfortunately we can't accept copies or photos of them.",
+    error_code: null
+  },
+  no_answer: ANSWER_PAYLOADS_EN.no_answer,
+  refused_symptom: ANSWER_PAYLOADS_EN.refused_symptom
+};
+
+// One lookup per (appointment, language) pair, read via fx() (app.js sets
+// `appointment` and `lang`). Keeps every appointment/language-dependent
+// fixture reference in one place instead of scattering checks through
+// buildScenario and app.js. "mrt" only ever needs a high_confidence payload,
+// no type pick, and no pre-loaded notes, but still carries noteExamples: the
+// note composer's example chips and simulation rule are shared by every
+// appointment.
+const APPOINTMENTS = {
+  checkup: {
+    de: {
+      contextBase: CONTEXT_BASE,
+      noteN1: NOTE_N1,
+      noteN2: NOTE_N2,
+      typeOptions: TYPE_OPTIONS,
+      noteExamples: NOTE_EXAMPLES,
+      defaultItemsBase: DEFAULT_ITEMS_BASE,
+      checklistPayloads: CHECKLIST_PAYLOADS,
+      answerPayloads: ANSWER_PAYLOADS,
+      doctorName: "Frau Dr. Jane Musterfrau",
+      doctorRole: "Hausärztin / Allgemeinmedizinerin"
+    },
+    en: {
+      contextBase: CONTEXT_BASE_EN,
+      noteN1: NOTE_N1_EN,
+      noteN2: NOTE_N2_EN,
+      typeOptions: TYPE_OPTIONS_EN,
+      noteExamples: NOTE_EXAMPLES_EN,
+      defaultItemsBase: DEFAULT_ITEMS_BASE_EN,
+      checklistPayloads: CHECKLIST_PAYLOADS_EN,
+      answerPayloads: ANSWER_PAYLOADS_EN,
+      doctorName: "Dr. Jane Musterfrau",
+      doctorRole: "General practitioner / Family medicine"
+    }
+  },
+  mrt: {
+    de: {
+      contextBase: MRT_CONTEXT_BASE,
+      noteN1: null,
+      noteN2: null,
+      typeOptions: [],
+      noteExamples: NOTE_EXAMPLES,
+      defaultItemsBase: MRT_DEFAULT_ITEMS,
+      checklistPayloads: MRT_CHECKLIST_PAYLOADS,
+      answerPayloads: MRT_ANSWER_PAYLOADS,
+      doctorName: "Radiologie am Musterplatz",
+      doctorRole: "Radiologie"
+    },
+    en: {
+      contextBase: MRT_CONTEXT_BASE_EN,
+      noteN1: null,
+      noteN2: null,
+      typeOptions: [],
+      noteExamples: NOTE_EXAMPLES_EN,
+      defaultItemsBase: MRT_DEFAULT_ITEMS_EN,
+      checklistPayloads: MRT_CHECKLIST_PAYLOADS_EN,
+      answerPayloads: MRT_ANSWER_PAYLOADS_EN,
+      doctorName: "Musterplatz Radiology",
+      doctorRole: "Radiology"
+    }
+  }
+};
+
+// Reads the active appointment + language's fixture set. `appointment` and
+// `lang` are declared in app.js; this is only ever called at runtime (after
+// app.js has set them), never at script load time, so the load order of the
+// two files doesn't matter.
 function fx() {
-  return FIXTURE_SETS[lang];
+  return APPOINTMENTS[appointment][lang];
 }
 
 // Scenarios drive the demo switcher. Each builds a fresh, independent
 // appointment context so interactions in one scenario never leak into another.
 function buildScenario(id) {
   const f = fx();
+  if (appointment === "mrt") id = "high_confidence"; // the only state MRT has
   switch (id) {
     case "high_confidence":
       return {
         id,
         label: "3 · High confidence",
-        context: { ...f.contextBase, default_items: clone(f.defaultItemsBase), patient_notes: [clone(f.noteN1)], consent_given: true },
+        context: { ...f.contextBase, default_items: clone(f.defaultItemsBase), patient_notes: f.noteN1 ? [clone(f.noteN1)] : [], consent_given: true },
         payload: clone(f.checklistPayloads.high_confidence)
       };
     case "mixed_confidence":

@@ -36,6 +36,26 @@ keeps the current State selection, the generic toggle and consent. The
 reviewer control bar itself always stays in English, regardless of this
 switch.
 
+The **Appointment** dropdown switches between two people's appointments:
+**Check-up** (the default, everything described above) and **MRT Knie**, a
+knee MRI at a different practice ("Radiologie am Musterplatz" /
+"Musterplatz Radiology"). The MRT appointment only has one checklist
+state — high confidence, 4 practice items plus the 3 default items — so
+while it's selected, the State dropdown and the Generic appointment type
+toggle are disabled (the dropdown shows "High confidence", the toggle is
+off). Its question sheet has 3 example chips instead of 5: a referral
+question specific to the MRT, plus the check-up's parking and dizziness
+chips reused verbatim (they don't reference a specific appointment type);
+the water, coffee and error chips are check-up-only and don't appear.
+Preparation notes and the note-to-item simulation work exactly as for the
+check-up. Switching appointments, in either direction, resets the phone to
+the entry point and clears ticks, hidden items, notes **and consent** — a
+fuller reset than the Generic toggle or Language switch, since it's a
+different person's appointment, not just a different view of the same one.
+The State dropdown's last value is remembered per appointment, so a trip
+through MRT and back doesn't lose your place in the check-up's states. The
+frame badge appends "· MRT" while this appointment is active.
+
 ## What's real vs. simulated
 
 This is a frontend prototype with **no live model calls** (per your choice).
@@ -58,7 +78,8 @@ Concretely:
   deleting one removes them. This doesn't run in failure (no notes section
   shown there) or cold start (no model call — the note still shows, just
   without a status line).
-- The question sheet has 5 example chips (one per answer state) that fill
+- The question sheet has one example chip per available answer state (5 for
+  the check-up, 3 for the MRT — see the Appointment section above) that fill
   in the exact canned questions from the payload doc — tap one, then
   "Fragen" to see that exact answer state. Typing anything else resolves to
   `no_answer` (a safe fallback; there's no live NLP to match arbitrary text).
@@ -86,7 +107,8 @@ Concretely:
 
 - `index.html` — shell, Google Fonts (Montserrat/Roboto), scenario switcher
 - `styles.css` — design tokens from `DesignSystem/tokens.json`, components
-- `fixtures.js` — appointment contexts + checklist/answer payloads, verbatim
-  German from the spec files plus a hand-translated English mirror
+- `fixtures.js` — appointment contexts + checklist/answer payloads for both
+  appointments (check-up, MRT Knie), verbatim German from the spec files
+  plus a hand-translated English mirror for each
 - `app.js` — state machine, rendering, interactions
 - `assets/` — Doctolib wordmark + doctor avatar, copied from `DesignSystem/`

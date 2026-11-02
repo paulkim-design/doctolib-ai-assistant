@@ -111,6 +111,11 @@ button {
   background: var(--white);
   color: var(--ink-black);
 }
+.proto-controls select:disabled,
+.proto-controls .toggle-field input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .proto-controls .toggle-field {
   display: inline-flex;
   align-items: center;
@@ -244,6 +249,17 @@ button {
   border-radius: var(--radius-pill);
   object-fit: cover;
   background: var(--white);
+  flex-shrink: 0;
+}
+.avatar-placeholder {
+  width: var(--size-avatar);
+  height: var(--size-avatar);
+  border-radius: var(--radius-pill);
+  background: var(--surface-page);
+  color: var(--slate-700);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
 }
 .doctor-row .name { font-size: 15px; font-weight: 500; color: var(--slate-700); }

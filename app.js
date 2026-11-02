@@ -25,6 +25,8 @@ let prevQuestionWaiting = false;
 let stateGen = 0; // invalidates in-flight waiting timers when the State control changes
 let genericOn = false; // "Generic appointment type" toggle
 let lang = "de"; // phone UI language: "de" (default) | "en"
+let appointment = "checkup"; // "Appointment" control: "checkup" (default) | "mrt"
+let lastCheckupScenarioId = "high_confidence"; // remembers the State dropdown's value across a trip through "mrt"
 
 /* ---------------------------- Copy (UI chrome) ---------------------------- */
 
@@ -41,8 +43,6 @@ const COPY = {
     de: (n) => (n === 1 ? "1 Punkt vor Ihrem Termin prüfen" : `${n} Punkte vor Ihrem Termin prüfen`),
     en: (n) => (n === 1 ? "1 item to check before your appointment" : `${n} items to check before your appointment`)
   },
-  doctorName: { de: "Frau Dr. Jane Musterfrau", en: "Dr. Jane Musterfrau" },
-  doctorRole: { de: "Hausärztin / Allgemeinmedizinerin", en: "General practitioner / Family medicine" },
   reschedule: { de: "Verschieben", en: "Reschedule" },
   cancelAppointment: { de: "Termin absagen", en: "Cancel appointment" },
 
@@ -240,7 +240,27 @@ function fullReset(id) {
   stateGen++;
   genericOn = false;
   lang = "de";
+  appointment = "checkup";
+  lastCheckupScenarioId = id;
   state = freshState(id);
+  render();
+}
+
+// Switching appointments, in either direction, returns the phone to the
+// entry point and resets ticks, hidden items, notes and consent — a fuller
+// reset than the generic toggle or language switch, since the appointment
+// itself is a different person's context, not just a different view of the
+// same one. The generic toggle always turns off too: "mrt" has no type pick
+// flow, and a stale "on" shouldn't resurface when switching back. The State
+// dropdown's value is remembered per appointment so flipping to "mrt" and
+// back doesn't lose a reviewer's place in the check-up's states.
+function setAppointment(newAppointment) {
+  if (newAppointment === appointment) return;
+  stateGen++;
+  appointment = newAppointment;
+  genericOn = false;
+  const targetScenario = appointment === "mrt" ? "high_confidence" : lastCheckupScenarioId;
+  state = freshState(targetScenario);
   render();
 }
 
@@ -296,7 +316,9 @@ function buildGenericCheckupVariant(id) {
 // reach the same states and is the only path that can land on cold start via
 // a different pick.
 function changeState(id) {
+  if (appointment === "mrt") return; // the State dropdown is disabled while "mrt" is active
   stateGen++;
+  lastCheckupScenarioId = id;
   const fresh = freshState(id);
   if (genericOn) {
     const variant = buildGenericCheckupVariant(id);
@@ -316,6 +338,7 @@ function changeState(id) {
 // leaves consent as it was (so the consent sheet only reappears if consent
 // was never given).
 function toggleGeneric(isOn) {
+  if (appointment === "mrt") return; // disabled and forced off while "mrt" is active
   stateGen++;
   genericOn = isOn;
   const consentWasGiven = state.consentGiven;
@@ -506,8 +529,11 @@ function enterChecklistFlow() {
 }
 
 function currentFrameLabel() {
-  const label = baseFrameLabel();
-  return genericOn && label ? `${label} · generic` : label;
+  let label = baseFrameLabel();
+  if (!label) return label;
+  if (genericOn) label += " · generic";
+  if (appointment === "mrt") label += " · MRT";
+  return label;
 }
 
 function baseFrameLabel() {
@@ -539,8 +565,11 @@ function baseFrameLabel() {
 
 function render() {
   document.getElementById("frame-badge").textContent = currentFrameLabel();
+  document.getElementById("appointment-select").value = appointment;
   document.getElementById("scenario-select").value = state.scenarioId;
+  document.getElementById("scenario-select").disabled = appointment === "mrt";
   document.getElementById("generic-toggle").checked = genericOn;
+  document.getElementById("generic-toggle").disabled = appointment === "mrt";
   document.getElementById("lang-select").value = lang;
   // The phone is the page's dominant content; follow its language so screen
   // readers pronounce it correctly. The reviewer control bar stays English
@@ -610,16 +639,22 @@ function renderScreenBody() {
 
 function renderAppointment() {
   const subtitle = !state.consentGiven ? t("entrySubtitleBeforeConsent") : t("entrySubtitleAfterConsent", unresolvedCount());
+  // A radiology practice has no single named doctor to show, so "mrt" gets a
+  // neutral placeholder instead of the (specific-doctor) avatar photo.
+  const avatar =
+    appointment === "mrt"
+      ? `<div class="avatar-placeholder" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" width="22" height="22"><path d="M4 21V7l8-4 8 4v14M4 21h16M9 21v-6h6v6M9 10h.01M15 10h.01M9 14h.01M15 14h.01" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>`
+      : `<img src="assets/doctor-avatar.jpg" alt="" />`;
 
   return `
   <div class="body-scroll">
     <div class="appointment-body">
       <div style="font-size:14px;color:var(--navy-900);font-weight:500;margin-bottom:14px;">${esc(formatDate(state.ctx.appointment_datetime))}</div>
       <div class="doctor-row">
-        <img src="assets/doctor-avatar.jpg" alt="" />
+        ${avatar}
         <div>
-          <div class="name">${esc(t("doctorName"))}</div>
-          <div class="role">${esc(t("doctorRole"))}</div>
+          <div class="name">${esc(fx().doctorName)}</div>
+          <div class="role">${esc(fx().doctorRole)}</div>
         </div>
       </div>
       <div class="actions-row">
@@ -1324,6 +1359,7 @@ function initControls() {
     select.appendChild(opt);
   });
   select.addEventListener("change", (e) => changeState(e.target.value));
+  document.getElementById("appointment-select").addEventListener("change", (e) => setAppointment(e.target.value));
   document.getElementById("generic-toggle").addEventListener("change", (e) => toggleGeneric(e.target.checked));
   document.getElementById("lang-select").addEventListener("change", (e) => setLang(e.target.value));
   document.getElementById("reset-btn").addEventListener("click", () => fullReset("high_confidence"));
