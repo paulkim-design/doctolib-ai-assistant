@@ -236,10 +236,13 @@ function freshState(scenarioId) {
   };
 }
 
+// "Zurücksetzen": resets consent, the appointment (to check-up), the State
+// (to the given id, always "high_confidence" from the reset button), the
+// generic toggle, ticks, hidden items and notes. The language is a viewing
+// preference, not a feature setting, so it's left as it was.
 function fullReset(id) {
   stateGen++;
   genericOn = false;
-  lang = "de";
   appointment = "checkup";
   lastCheckupScenarioId = id;
   state = freshState(id);
@@ -247,20 +250,22 @@ function fullReset(id) {
 }
 
 // Switching appointments, in either direction, returns the phone to the
-// entry point and resets ticks, hidden items, notes and consent — a fuller
-// reset than the generic toggle or language switch, since the appointment
-// itself is a different person's context, not just a different view of the
-// same one. The generic toggle always turns off too: "mrt" has no type pick
-// flow, and a stale "on" shouldn't resurface when switching back. The State
-// dropdown's value is remembered per appointment so flipping to "mrt" and
-// back doesn't lose a reviewer's place in the check-up's states.
+// entry point and resets ticks, hidden items and notes, but leaves consent
+// as it was: consent is given once for the whole feature, not per
+// appointment, and both appointments belong to the same patient. The
+// generic toggle always turns off too: "mrt" has no type pick flow, and a
+// stale "on" shouldn't resurface when switching back. The State dropdown's
+// value is remembered per appointment so flipping to "mrt" and back doesn't
+// lose a reviewer's place in the check-up's states.
 function setAppointment(newAppointment) {
   if (newAppointment === appointment) return;
   stateGen++;
   appointment = newAppointment;
   genericOn = false;
+  const consentWasGiven = state.consentGiven;
   const targetScenario = appointment === "mrt" ? "high_confidence" : lastCheckupScenarioId;
   state = freshState(targetScenario);
+  state.consentGiven = consentWasGiven;
   render();
 }
 

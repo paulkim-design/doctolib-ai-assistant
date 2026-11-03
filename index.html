@@ -16,24 +16,30 @@
   </header>
 
   <div class="proto-controls">
-    <label for="appointment-select">Appointment</label>
-    <select id="appointment-select" aria-label="Select appointment">
-      <option value="checkup">Check-up</option>
-      <option value="mrt">MRT Knie</option>
-    </select>
-    <label for="scenario-select">State</label>
-    <select id="scenario-select" aria-label="Select checklist state"></select>
-    <label class="toggle-field" for="generic-toggle">
+    <div class="control">
+      <label for="appointment-select">Appointment</label>
+      <select id="appointment-select" aria-label="Select appointment">
+        <option value="checkup">Check-up</option>
+        <option value="mrt">MRT Knie</option>
+      </select>
+    </div>
+    <div class="control">
+      <label for="scenario-select">State</label>
+      <select id="scenario-select" aria-label="Select checklist state"></select>
+    </div>
+    <label class="control toggle-field" for="generic-toggle">
       <input type="checkbox" id="generic-toggle" />
       Generic appointment type
     </label>
-    <label for="lang-select">Language</label>
-    <select id="lang-select" aria-label="Select phone language">
-      <option value="de">Deutsch (default)</option>
-      <option value="en">English</option>
-    </select>
-    <button class="reset" id="reset-btn" type="button">Zurücksetzen</button>
-    <span class="frame-badge" id="frame-badge"></span>
+    <div class="control">
+      <label for="lang-select">Language</label>
+      <select id="lang-select" aria-label="Select phone language">
+        <option value="de">Deutsch (default)</option>
+        <option value="en">English</option>
+      </select>
+    </div>
+    <button class="control reset" id="reset-btn" type="button">Reset</button>
+    <span class="control frame-badge" id="frame-badge"></span>
   </div>
 
   <div class="device">
