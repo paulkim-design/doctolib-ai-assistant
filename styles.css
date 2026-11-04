@@ -359,7 +359,7 @@ button.action-card:hover { background: var(--surface-page); }
 .ki-badge-inline {
   display: inline-flex;
   align-items: center;
-  background: var(--slate-800);
+  background: var(--blue-primary);
   color: var(--white);
   font-size: 9px;
   font-weight: 700;
@@ -399,15 +399,18 @@ button.action-card:hover { background: var(--surface-page); }
   -webkit-line-clamp: unset;
   overflow: visible;
 }
+/* "Mehr anzeigen"/"Weniger anzeigen": grey — text-muted, the middle of the
+   design system's three blue-tinted text tones (it has no neutral grey). */
 .quote-toggle {
   margin-top: 4px;
   font-size: 12px;
-  color: var(--blue-interactive);
+  color: var(--text-muted);
   font-weight: 500;
 }
 
 /* Full-bleed top rule ignoring the card's own padding, with a vertical rule
-   splitting the two buttons. */
+   splitting the two buttons. "Trifft auf mich nicht zu": light grey
+   (text-subtle). "Warum sehe ich das?": darker grey (slate-700). */
 .item-actions {
   display: flex;
   margin: 10px -12px -12px;
@@ -417,13 +420,30 @@ button.action-card:hover { background: var(--surface-page); }
   flex: 1;
   text-align: center;
   font-size: 12px;
-  color: var(--blue-interactive);
   font-weight: 500;
   padding: 10px 12px;
   min-height: 24px;
 }
+.item-actions button[data-action="dismiss-item"] { color: var(--text-subtle); }
+.item-actions button[data-action="why-item"] { color: var(--slate-700); }
 .item-actions button:first-child {
   border-right: var(--border-hairline) solid var(--divider);
+}
+
+/* Dismissed ("Trifft auf mich nicht zu") item: collapsed in place, light
+   grey, no timer — "Rückgängig" restores the full card. */
+.item-card.dismissed {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+}
+.dismissed-text {
+  font-size: 13px;
+  color: var(--text-subtle);
+}
+.dismissed-text button {
+  color: var(--blue-interactive);
+  font-weight: 500;
 }
 
 /* ---------- Notes section ---------- */

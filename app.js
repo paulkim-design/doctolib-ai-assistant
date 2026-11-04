@@ -73,6 +73,7 @@ const COPY = {
   kiBadge: { de: "KI", en: "AI" },
   kiBadgeAriaLabel: { de: "Von KI gefunden", en: "Found by AI" },
   dismissItem: { de: "Trifft auf mich nicht zu", en: "Doesn't apply to me" },
+  undoDismiss: { de: "Rückgängig", en: "Undo" },
   whySeeThis: { de: "Warum sehe ich das?", en: "Why am I seeing this?" },
 
   reminderPrefix: { de: "Erinnerung", en: "Reminder" },
@@ -183,6 +184,10 @@ const COPY = {
     de: (when, group) => `Erinnerung: ${when}. Der Text nennt keinen Zeitpunkt, deshalb gilt der Standard für „${group}".`,
     en: (when, group) => `Reminder: ${when}. The text doesn't name a time, so the default for "${group}" applies.`
   },
+  whyReminderUnclear: {
+    de: (when) => `Erinnerung: ${when}. Ihre Notiz nennt keinen Zeitpunkt.`,
+    en: (when) => `Reminder: ${when}. Your note doesn't name a time.`
+  },
 
   deleteNoteTitle: { de: "Notiz löschen?", en: "Delete note?" },
   deleteNoteBody: {
@@ -268,8 +273,10 @@ function daysUntilAppointment() {
 // appointment_day: the appointment day; prepare_now: 1 week before, unless
 // the appointment is under a week away, in which case there's no reminder at
 // all (the item just sorts to the top of its group instead). Unclear items
-// (group: null) never have a due time.
+// have no group, but always default to 1 day before — they still need a
+// reminder, just not a group to derive one from.
 function reminderDueDays(item) {
+  if (item.action === "unclear") return 1;
   if (item.group == null) return null;
   if (item.due_before) {
     return item.due_before.unit === "hours" ? 1 : item.due_before.value;
@@ -447,12 +454,15 @@ function itemKind(item) {
   return "note";
 }
 
+// Dismissed ("Trifft auf mich nicht zu") items stay in the list — they
+// collapse in place into a compact row instead of disappearing — so this no
+// longer filters by hidden state; renderItemCard decides how to draw each one.
 function visibleItems() {
   const p = state.payload;
   if (p.state === "error" || isColdStart()) return [];
   const def = state.ctx.default_items.map(normalizeItem);
   const results = p.results.map(normalizeItem);
-  return [...def, ...results].filter((it) => !(state.itemState[it.id] && state.itemState[it.id].hidden));
+  return [...def, ...results];
 }
 
 // Splits visible items into the three named groups (in spec order, each
@@ -473,8 +483,12 @@ function groupItems() {
   return { byGroup, ungrouped };
 }
 
+// Dismissed items don't count as "open" (they don't apply), nor as done.
 function unresolvedCount() {
-  return visibleItems().filter((it) => !(state.itemState[it.id] && state.itemState[it.id].ticked)).length;
+  return visibleItems().filter((it) => {
+    const st = state.itemState[it.id];
+    return !(st && (st.ticked || st.hidden));
+  }).length;
 }
 
 function findItem(id) {
@@ -553,66 +567,86 @@ function enterChecklistFlow() {
   render();
 }
 
-// Simulates the AI extraction step for a note: there is no live NLP. The
-// vaccine-booklet example repeats default item d1 in every flow and so
-// produces no item. Flow 2's fixture matches keywords (case-insensitive,
-// German and English) against the patient's own typed text rather than an
-// exact string — mentioning a concept produces that concept's fixture item,
-// quoted with what they actually wrote; mentioning neither falls back to the
-// low-confidence "unclear note" item instead of guessing (system prompt §4).
-// Anything typed in a flow with no noteSimRule becomes one generic item.
+// Splits a note into sentences, so a day/hour count only applies to the
+// concept named in that same sentence, not the whole note.
+function splitSentences(text) {
+  const parts = text
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  return parts.length > 0 ? parts : [text];
+}
+
+function sentenceMatchesConcept(sentence, concept) {
+  const lower = sentence.toLowerCase();
+  return concept.keywords.some((kw) =>
+    concept.wholeWord ? new RegExp(`\\b${kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(lower) : lower.includes(kw)
+  );
+}
+
+// A day or hour count named in the sentence, within the schema's ranges
+// (days 1-30, hours 1-72) — or null if none is named.
+function extractDueBefore(sentence) {
+  const dayMatch = sentence.match(/(\d+)\s*(tage?|days?)/i);
+  if (dayMatch) {
+    const n = parseInt(dayMatch[1], 10);
+    if (n >= 1 && n <= 30) return { value: n, unit: "days" };
+  }
+  const hourMatch = sentence.match(/(\d+)\s*(stunden?|hours?)/i);
+  if (hourMatch) {
+    const n = parseInt(hourMatch[1], 10);
+    if (n >= 1 && n <= 72) return { value: n, unit: "hours" };
+  }
+  return null;
+}
+
+// Simulates the AI extraction step for a note: there is no live NLP.
+// resolvedNoteConcepts() (fixtures.js) matches keywords (case-insensitive,
+// German and English) against the sentence they appear in — mentioning a
+// concept produces that concept's fixture item, quoted with what the patient
+// actually wrote, using a day/hour count from that same sentence if it names
+// one. A concept flagged noItem (the insurance card, already a default item)
+// is recognized but produces nothing, per the system prompt's
+// duplicate-avoidance rule. If nothing at all matches, the note becomes the
+// low-confidence "unclear note" item instead of a guess (system prompt §4).
 // Always returns an array (possibly empty) of result-shaped objects sharing
 // source_quote = the full note text.
 function simulatedItemForNote(note) {
-  if (note.text === NOTE_EXAMPLES.vaccineCard[LANG]) return [];
-  const rule = fx().noteSimRule;
-  if (rule) {
-    const lower = note.text.toLowerCase();
-    const items = [];
-    if (rule.medication.keywords.some((kw) => lower.includes(kw))) items.push(noteSimItem(note, "a", rule.medication.item));
-    if (rule.water.keywords.some((kw) => lower.includes(kw))) items.push(noteSimItem(note, "b", rule.water.item));
-    if (items.length > 0) return items;
-    return [
-      {
-        id: `sim-${note.id}`,
-        title: note.text,
-        source: "patient",
-        action: "unclear",
-        group: null,
-        due_before: null,
-        band: "low",
-        confidence: 0.2,
-        source_quote: note.text
-      }
-    ];
-  }
+  const sentences = splitSentences(note.text);
+  const concepts = resolvedNoteConcepts();
+  const items = [];
+  let anyMatched = false;
+  concepts.forEach((c) => {
+    const sentence = sentences.find((s) => sentenceMatchesConcept(s, c));
+    if (!sentence) return;
+    anyMatched = true;
+    if (c.noItem) return;
+    items.push({
+      id: `sim-${note.id}-${c.key}`,
+      title: c.item.title,
+      source: "patient",
+      action: c.item.action,
+      group: c.item.group,
+      due_before: extractDueBefore(sentence) || c.item.due_before || null,
+      band: "high",
+      confidence: 0.8,
+      source_quote: note.text
+    });
+  });
+  if (items.length > 0 || anyMatched) return items;
   return [
     {
       id: `sim-${note.id}`,
       title: note.text,
       source: "patient",
-      action: "do_or_avoid",
-      group: "appointment_day",
+      action: "unclear",
+      group: null,
       due_before: null,
-      band: "high",
-      confidence: 0.8,
+      band: "low",
+      confidence: 0.2,
       source_quote: note.text
     }
   ];
-}
-
-function noteSimItem(note, suffix, def) {
-  return {
-    id: `sim-${note.id}-${suffix}`,
-    title: def.title,
-    source: "patient",
-    action: def.action,
-    group: def.group,
-    due_before: def.due_before,
-    band: def.band,
-    confidence: def.confidence,
-    source_quote: note.text
-  };
 }
 
 function removeItemsForNoteText(text) {
@@ -851,8 +885,17 @@ function renderGroupSection(groupId, items) {
 }
 
 // `compact`: true for a ticked item — always visible (no collapse), just a
-// muted checkbox+title row, no strikethrough.
+// muted checkbox+title row, no strikethrough. A dismissed item ("Trifft auf
+// mich nicht zu") takes priority over both: it collapses in place into one
+// compact muted row with "Rückgängig" to restore it, no timer.
 function renderItemCard(item, compact) {
+  const st = state.itemState[item.id] || { ticked: false, hidden: false };
+  if (st.hidden) {
+    return `
+    <div class="item-card dismissed" data-item-id="${item.id}">
+      <span class="dismissed-text">${esc(t("dismissItem"))} · <button data-action="undo-dismiss" data-id="${item.id}">${esc(t("undoDismiss"))}</button></span>
+    </div>`;
+  }
   if (compact) {
     return `
     <div class="item-card done-compact" data-item-id="${item.id}">
@@ -863,7 +906,6 @@ function renderItemCard(item, compact) {
 
   const kind = itemKind(item);
   const isAi = kind === "practice-high" || kind === "practice-low" || kind === "note";
-  const st = state.itemState[item.id] || { ticked: false, hidden: false };
 
   let sourceLine = "";
   if (kind === "default") sourceLine = `<div class="item-source">${esc(t("defaultLabel"))}</div>`;
@@ -1120,9 +1162,13 @@ function renderWhySheet() {
   const defaultDays = reminderDueDays(item);
   if (defaultDays !== null && effectiveReminder(item) !== null) {
     const when = labelForDays(defaultDays);
-    body += item.due_before
-      ? `<p class="body-text">${esc(t("whyReminderFromSource", when))}</p>`
-      : `<p class="body-text">${esc(t("whyReminderFromDefault", when, t("group_" + item.group)))}</p>`;
+    if (kind === "unclear") {
+      body += `<p class="body-text">${esc(t("whyReminderUnclear", when))}</p>`;
+    } else {
+      body += item.due_before
+        ? `<p class="body-text">${esc(t("whyReminderFromSource", when))}</p>`
+        : `<p class="body-text">${esc(t("whyReminderFromDefault", when, t("group_" + item.group)))}</p>`;
+    }
   }
   return `
   <div class="backdrop" data-action="close-sheet-backdrop">
@@ -1198,6 +1244,13 @@ function onRootClick(e) {
       const id = el.dataset.id;
       const cur = state.itemState[id] || { ticked: false, hidden: false };
       state.itemState[id] = { ...cur, hidden: true };
+      render();
+      break;
+    }
+    case "undo-dismiss": {
+      const id = el.dataset.id;
+      const cur = state.itemState[id] || { ticked: false, hidden: false };
+      state.itemState[id] = { ...cur, hidden: false };
       render();
       break;
     }
