@@ -68,6 +68,10 @@ const COPY = {
   retry: { de: "Erneut versuchen", en: "Try again" },
 
   coldStartHeading: { de: "Für diesen Termin gibt es noch keine Vorbereitungsinfos.", en: "There's no preparation info for this appointment yet." },
+  coldStartNoteInvite: {
+    de: "Hat Ihnen Ihre Praxis etwas zur Vorbereitung gesagt? Notieren Sie es hier.",
+    en: "Did your practice tell you anything about preparation? Note it down here."
+  },
 
   noResultSubline: { de: "Die allgemeine Liste für diese Terminart:", en: "The general list for this appointment type:" },
 
@@ -333,6 +337,10 @@ function reminderDueDays(item) {
   if (item.due_before) {
     return item.due_before.unit === "hours" ? 1 : item.due_before.value;
   }
+  // A fasting instruction without a stated time needs a day's notice to
+  // actually follow it, unlike most "on the day" defaults — 1 day before,
+  // not 1 hour before.
+  if (item.fasting) return 1;
   if (item.group === "prepare_now") return daysUntilAppointment() < 7 ? null : 7;
   if (item.group === "before_appointment") return 3;
   return 0; // appointment_day
@@ -702,6 +710,7 @@ function simulatedItemForNote(note) {
       due_before: dueBefore,
       band: lowConfidence ? "low" : "high",
       confidence: lowConfidence ? 0.4 : 0.8,
+      fasting: !!c.fasting,
       source_quote: note.text
     });
   });
@@ -953,7 +962,8 @@ function renderFailureBody() {
 
 function renderColdStartBody() {
   return `
-    <div class="framing"><h2>${esc(t("coldStartHeading"))}</h2></div>
+    <div class="framing"><h2>${esc(t("coldStartHeading"))}</h2><p class="sub">${esc(t("coldStartNoteInvite"))}</p></div>
+    <div class="cold-start-note-cta"><button class="btn-primary" data-action="open-note-composer">${esc(t("addNoteTitle"))}</button></div>
     <div class="card-stack">
       ${renderContactCard()}
       ${renderUrgentCard()}
@@ -1174,7 +1184,21 @@ function renderConsentSheet() {
         <h2 id="consent-title">${esc(t("prepTitle"))}</h2>
         <button class="sheet-close" data-action="decline-consent" aria-label="${esc(t("close"))}">✕</button>
       </div>
-      <div class="sheet-illustration" aria-hidden="true"></div>
+      <div class="sheet-illustration" aria-hidden="true">
+        <svg viewBox="0 0 400 120" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+          <defs>
+            <filter id="consent-blob-blur" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="9" />
+            </filter>
+          </defs>
+          <g filter="url(#consent-blob-blur)">
+            <ellipse cx="85" cy="75" rx="80" ry="55" opacity="0.8" style="fill:var(--navy-900)" />
+            <ellipse cx="230" cy="35" rx="100" ry="72" opacity="0.9" style="fill:var(--blue-primary)" />
+            <ellipse cx="330" cy="88" rx="65" ry="48" opacity="0.85" style="fill:var(--cyan)" />
+            <ellipse cx="165" cy="92" rx="42" ry="30" opacity="0.92" style="fill:var(--yellow)" />
+          </g>
+        </svg>
+      </div>
       <h3 class="heading">${esc(t("consentHeading", state.ctx.patient_display_name))}</h3>
       <p class="body-text">${esc(t("consentBody"))}</p>
       <p class="body-text">${esc(t("consentReminderParagraph"))}</p>
@@ -1193,9 +1217,9 @@ function renderNoteComposerSheet() {
   const title = isAdd ? t("addNoteTitle") : t("editNoteTitle");
   let examples = "";
   if (isAdd) {
-    // Only the two universal chips from brief §5 — participants write the
-    // note themselves, so no flow-specific chip hands them the answer.
-    const chips = [NOTE_EXAMPLES.medication[LANG], NOTE_EXAMPLES.vaccineCard[LANG]];
+    // Only the one universal chip — participants write the note themselves,
+    // so no flow-specific chip hands them the answer.
+    const chips = [NOTE_EXAMPLES.vaccineCard[LANG]];
     examples = `<div class="example-row">
         <span class="ex-label">${esc(t("examplesLabel"))}</span>
         ${chips.map((c) => `<button class="example-chip" data-action="fill-example-note" data-text="${esc(c)}">${esc(c)}</button>`).join("")}

@@ -17,6 +17,10 @@
   --info-bg: #e6f9ff;
   --info-border: #a8eaff;
   --info-ink: #004f78;
+  /* Home-hero blob colours, measured from the real app (DesignSystem/
+     tokens.json), reused for the consent sheet's decorative illustration. */
+  --cyan: #00bffe;
+  --yellow: #fecd4d;
 
   /* Warning/amber tokens added for this prototype only — not part of the
      measured Doctolib design system, which has no warning tokens. Extended
@@ -268,6 +272,10 @@ button {
   font-size: 13px;
   color: var(--text-muted);
   margin: 0;
+}
+
+.cold-start-note-cta {
+  padding: 0 var(--space-16) 14px;
 }
 
 .status-line {
@@ -657,9 +665,11 @@ button {
   height: 96px;
   margin: 10px 0 14px;
   border-radius: 14px;
-  background: linear-gradient(135deg, var(--surface-page), var(--info-bg));
-  border: var(--border-hairline) solid var(--info-border);
+  overflow: hidden;
+  background: var(--surface-page);
+  border: var(--border-hairline) solid var(--border-card);
 }
+.sheet-illustration svg { display: block; width: 100%; height: 100%; }
 
 .sheet h3.heading {
   font-family: var(--font-display);

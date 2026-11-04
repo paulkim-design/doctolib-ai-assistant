@@ -21,10 +21,10 @@ function clone(x) {
   return JSON.parse(JSON.stringify(x));
 }
 
-// The two universal note-composer suggestion chips (shown when adding a
-// note, any flow).
+// The universal note-composer suggestion chip (shown when adding a note,
+// any flow). The medication-pause suggestion was removed: it always names
+// no day/hour count, so it always produced a "Bitte prüfen" item.
 const NOTE_EXAMPLES = {
-  medication: { de: "Das in der Sprechstunde besprochene Medikament pausieren", en: "Pause the medication discussed during the appointment" },
   vaccineCard: { de: "Impfpass mitbringen", en: "Bring the vaccination booklet" }
 };
 
@@ -84,6 +84,11 @@ const NOTE_CONCEPTS = [
   {
     key: "fasting",
     keywords: ["nüchtern", "fasting"],
+    // Fasting instructions without a stated time get their own reminder
+    // default (1 day before, not the usual 1 hour) — see the `fasting` flag
+    // threaded through resolvedNoteConcepts()/simulatedItemForNote() into
+    // reminderDueDays() in app.js.
+    fasting: true,
     item: {
       de: { title: "Nüchtern zum Termin kommen", action: "do_or_avoid", group: "appointment_day" },
       en: { title: "Come to the appointment fasting", action: "do_or_avoid", group: "appointment_day" }
@@ -119,10 +124,11 @@ function resolvedNoteConcepts() {
     wholeWord: c.wholeWord,
     noItem: c.noItem,
     requiresTime: c.requiresTime,
+    fasting: c.fasting,
     item: c.item ? c.item[LANG] : null,
     resolveOverride: overrides[c.key] ? overrides[c.key].resolve : null
   }));
-  extras.forEach((c) => base.push({ key: c.key, keywords: c.keywords, wholeWord: c.wholeWord, noItem: c.noItem, requiresTime: c.requiresTime, item: c.item[LANG], resolveOverride: null }));
+  extras.forEach((c) => base.push({ key: c.key, keywords: c.keywords, wholeWord: c.wholeWord, noItem: c.noItem, requiresTime: c.requiresTime, fasting: c.fasting, item: c.item[LANG], resolveOverride: null }));
   return base;
 }
 
@@ -308,7 +314,7 @@ const FLOW3_DE = {
     results: [
       { id: "p1", title: "Überweisung im Original besorgen und mitbringen", source: "practice", action: "bring", group: "prepare_now", due_before: null, band: "high", confidence: 0.9, source_quote: "Bitte bringen Sie die Überweisung Ihrer Hausarzt- oder Facharztpraxis im Original mit." },
       { id: "p2", title: "Vorbefunde mitbringen", source: "practice", action: "bring", group: "prepare_now", due_before: null, band: "high", confidence: 0.83, source_quote: "Falls Sie Vorbefunde haben, bringen Sie diese bitte mit." },
-      { id: "p3", title: "Nüchtern zum Termin kommen", source: "practice", action: "do_or_avoid", group: "appointment_day", due_before: null, band: "low", confidence: 0.42, source_quote: "Je nach Fragestellung kann ein Kontrastmittel nötig sein, in diesem Fall kommen Sie bitte nüchtern." }
+      { id: "p3", title: "Nüchtern kommen, falls Kontrastmittel nötig ist", source: "practice", action: "do_or_avoid", group: "appointment_day", due_before: null, band: "low", confidence: 0.42, fasting: true, source_quote: "Je nach Fragestellung kann ein Kontrastmittel nötig sein, in diesem Fall kommen Sie bitte nüchtern." }
     ]
   },
   interfaceState: { ticked: ["p1", "p2"], reminders_off: [] }
@@ -336,7 +342,7 @@ const FLOW3_EN = {
     results: [
       { id: "p1", title: "Get the referral and bring the original", source: "practice", action: "bring", group: "prepare_now", due_before: null, band: "high", confidence: 0.9, source_quote: "Please bring the referral from your GP or specialist practice in the original." },
       { id: "p2", title: "Bring previous findings", source: "practice", action: "bring", group: "prepare_now", due_before: null, band: "high", confidence: 0.83, source_quote: "If you have previous findings, please bring them." },
-      { id: "p3", title: "Come to the appointment fasting", source: "practice", action: "do_or_avoid", group: "appointment_day", due_before: null, band: "low", confidence: 0.42, source_quote: "Depending on the question being examined, a contrast agent may be needed; in that case, please come fasting." }
+      { id: "p3", title: "Come fasting if contrast agent is needed", source: "practice", action: "do_or_avoid", group: "appointment_day", due_before: null, band: "low", confidence: 0.42, fasting: true, source_quote: "Depending on the question being examined, a contrast agent may be needed; in that case, please come fasting." }
     ]
   },
   interfaceState: { ticked: ["p1", "p2"], reminders_off: [] }
