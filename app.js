@@ -269,24 +269,40 @@ const FRAMING = {
   error: { any: { de: "Die Informationen Ihrer Praxis konnten nicht geladen werden.", en: "Your practice's information couldn't be loaded." } }
 };
 
+// high_confidence/mixed_confidence/low_confidence are derived from the
+// bands actually present in results, not trusted as a static fixture field.
+// Unclear notes are excluded: the system couldn't turn them into an item at
+// all, so they're not something to "check," and must never trigger the
+// mixed/low-confidence "Bitte prüfen" framing, or payload.state, by
+// themselves. Shared by computeFraming() and recomputePayloadState().
+function effectiveConfidenceState(results) {
+  const bands = results.filter((r) => r.action !== "unclear").map((r) => r.band);
+  const hasHigh = bands.includes("high");
+  const hasLow = bands.includes("low");
+  return hasHigh && hasLow ? "mixed_confidence" : hasLow ? "low_confidence" : "high_confidence";
+}
+
 function computeFraming() {
   const p = state.payload;
   if (p.state === "no_result") return FRAMING.no_result.any[LANG];
   if (p.state === "error") return FRAMING.error.any[LANG];
-  // high_confidence/mixed_confidence/low_confidence are derived from the
-  // bands actually present in results, not trusted as a static fixture
-  // field. Unclear notes are excluded: the system couldn't turn them into
-  // an item at all, so they're not something to "check," and must never
-  // trigger the mixed/low-confidence "Bitte prüfen" framing by themselves.
-  const bands = p.results.filter((r) => r.action !== "unclear").map((r) => r.band);
-  const hasHigh = bands.includes("high");
-  const hasLow = bands.includes("low");
-  const effectiveState = hasHigh && hasLow ? "mixed_confidence" : hasLow ? "low_confidence" : "high_confidence";
+  const effectiveState = effectiveConfidenceState(p.results);
   if (effectiveState === "low_confidence") return FRAMING.low_confidence.any[LANG];
   const hasPractice = p.results.some((r) => r.source === "practice");
   const hasPatient = p.results.some((r) => r.source === "patient");
   const key = hasPractice && hasPatient ? "both" : hasPatient ? "patient" : "practice";
   return FRAMING[effectiveState][key][LANG];
+}
+
+// Keeps payload.state (and therefore isColdStart()) in sync with the
+// results actually present. Needed for a true cold-start fixture (no
+// default items, no practice information): it starts in "no_result" and
+// must leave that state once the patient's first note becomes items, so
+// the waiting → resolved transition and the entry-row count both follow.
+function recomputePayloadState() {
+  const p = state.payload;
+  if (p.state === "error") return;
+  p.state = p.results.length === 0 ? "no_result" : effectiveConfidenceState(p.results);
 }
 
 /* ---------------------------- Due times & reminders ---------------------------- */
@@ -785,9 +801,11 @@ function renderScreenBody() {
 }
 
 function renderAppointment() {
-  const label = !state.consentGiven ? t("entryBefore") : t("entryAfter", unresolvedCount());
-  // Flow 2's practice is a named GP, so it gets the doctor photo; the two MRT
-  // flows are a radiology practice with no single named doctor to show.
+  // Cold start (consent given, but nothing to show yet) reads "Vorbereitung"
+  // without a count, same as before consent — "0 offen" would be misleading.
+  const label = !state.consentGiven || isColdStart() ? t("entryBefore") : t("entryAfter", unresolvedCount());
+  // Flow 2's practice is a named GP, so it gets the doctor photo; the other
+  // two flows are a radiology practice with no single named doctor to show.
   const usesPhoto = FLOW_ID === "flow2";
   const avatar = usesPhoto
     ? `<img src="assets/doctor-avatar.jpg" alt="" />`
@@ -852,7 +870,7 @@ function renderAppointment() {
 
 // Mock address lines for the facility-details card — presentational "as
 // today" page content, not part of the Vorbereitung feature's own contact
-// data. Flow 2 uses its own street; the two MRT flows share Flow 1's.
+// data. Flow 2 uses its own street; the other two flows share Flow 1's.
 function mockFacilityAddress() {
   if (FLOW_ID === "flow2") return { street: "Musterweg 2", city: "12345 Musterstadt" };
   return { street: "Musterstraße 12", city: "12345 Musterstadt" };
@@ -1586,15 +1604,16 @@ function onRootClick(e) {
       if (state.noteComposer.mode === "add") {
         const note = { id: "u" + Date.now(), text, created_on: todayISO() };
         state.ctx.patient_notes.push(note);
-        if (!isColdStart()) simulatedItemForNote(note).forEach((item) => state.payload.results.push(item));
+        simulatedItemForNote(note).forEach((item) => state.payload.results.push(item));
       } else {
         const note = state.ctx.patient_notes.find((n) => n.id === state.noteComposer.editingId);
         if (note) {
           removeItemsForNoteText(note.text);
           note.text = text;
-          if (!isColdStart()) simulatedItemForNote(note).forEach((item) => state.payload.results.push(item));
+          simulatedItemForNote(note).forEach((item) => state.payload.results.push(item));
         }
       }
+      recomputePayloadState();
       state.sheet = null;
       runModelReRun();
       break;
@@ -1611,6 +1630,7 @@ function onRootClick(e) {
       state.ctx.patient_notes = state.ctx.patient_notes.filter((n) => n.id !== state.deleteTarget);
       state.deleteTarget = null;
       state.dialog = null;
+      recomputePayloadState();
       state.liveMessage = t("noteDeletedLive");
       state.focusNotesHeadingNext = true;
       runModelReRun();

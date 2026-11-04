@@ -9,11 +9,12 @@
   in-app switch for this: FLOW_ID and LANG are set once at boot by app.js from
   the URL (#flow1/#flow2/#flow3, ?lang=en) and never change afterwards.
 
-  Only "high_confidence" states are reachable, because none of the three
-  flows passes through mixed/low/no_result/error/cold_start — per flows.md's
-  own note on the urgent card, those states "stay designed but aren't in
-  these flows." The renderer in app.js still handles them generically (from
-  any payload.state), just with no fixture here ever triggering them.
+  Flow 1 is high_confidence throughout. Flow 2 starts cold (no practice
+  information, no default items) and moves to high_confidence once the
+  patient's note becomes items. Flow 3 is mixed_confidence: two high-band
+  practice items already done, one low-band item still open with the
+  warning strip. error/low_confidence stay reachable generically (from any
+  payload.state) but no fixture here ever triggers them.
 */
 
 function clone(x) {
@@ -188,14 +189,15 @@ const FLOW1_EN = {
 };
 
 /* ------------------------------- Flow 2 -------------------------------
-   "My note becomes items, and I'm reminded" — check-up with blood draw,
-   consent already given. Entry: appointment details page. The patient
-   writes the note themselves, in their own words, describing the two
-   instructions from the scenario (pause the blood thinner 2 days before,
-   drink enough water). Its medication-pause item keeps the scenario's
-   specific wording and 2-day fallback due time (used only if the note's
-   medication-pause sentence doesn't itself name a day/hour count); "water"
-   is a Flow-2-only concept, not part of the shared list. */
+   "My note becomes items, and I'm reminded" — cold start, then notes. A
+   routine check-up at the same GP practice, consent already given, but no
+   practice information and no default items at all: tapping "Vorbereitung"
+   shows the cold-start screen directly (brief §3/§5), no model call. The
+   patient writes their own note, in their own words; whatever it matches
+   becomes items via the shared keyword matching (plus this flow's own
+   medication-pause/water concepts below), moving the checklist out of cold
+   start entirely — no default list, so the framing reads "Hinweise aus
+   Ihren Notizen." once the note resolves. */
 
 const FLOW2_DE = {
   context: {
@@ -203,21 +205,17 @@ const FLOW2_DE = {
     appointment_datetime: "2027-06-03T08:00",
     practice_name: "Praxis Dr. Jane Musterfrau",
     practice_contact_lines: ["Musterweg 2, 12345 Musterstadt", "Telefon 01234 112233"],
-    appointment_type: "Gesundheits-Check-up mit Blutabnahme",
+    appointment_type: "Kontrolltermin",
     consent_given: true,
     general_reminders: [],
-    default_items: [
-      { id: "d1", title: "Versichertenkarte mitbringen", action: "bring", group: "appointment_day" }
-    ],
+    default_items: [],
     patient_notes: []
   },
   payload: {
-    state: "high_confidence",
-    framing: "Das hat Ihre Praxis für diese Terminart angegeben.",
+    state: "no_result",
+    framing: "Keine zusätzlichen Hinweise von Ihrer Praxis.",
     error_code: null,
-    results: [
-      { id: "p1", title: "8 Stunden vorher nichts essen, nur Wasser oder ungesüßten Tee trinken", source: "practice", action: "do_or_avoid", group: "appointment_day", due_before: { value: 8, unit: "hours" }, band: "high", confidence: 0.89, source_quote: "Für die Blutabnahme kommen Sie bitte nüchtern: In den 8 Stunden vor Ihrem Termin bitte nichts essen und nur Wasser oder ungesüßten Tee trinken." }
-    ]
+    results: []
   },
   interfaceState: { ticked: [], reminders_off: [] }
 };
@@ -228,21 +226,17 @@ const FLOW2_EN = {
     appointment_datetime: "2027-06-03T08:00",
     practice_name: "Dr. Jane Musterfrau Practice",
     practice_contact_lines: ["Musterweg 2, 12345 Musterstadt", "Phone 01234 112233"],
-    appointment_type: "Health check-up with blood draw",
+    appointment_type: "Check-up appointment",
     consent_given: true,
     general_reminders: [],
-    default_items: [
-      { id: "d1", title: "Bring your insurance card", action: "bring", group: "appointment_day" }
-    ],
+    default_items: [],
     patient_notes: []
   },
   payload: {
-    state: "high_confidence",
-    framing: "This is what your practice has stated for this appointment type.",
+    state: "no_result",
+    framing: "No extra information from your practice.",
     error_code: null,
-    results: [
-      { id: "p1", title: "Don't eat for 8 hours beforehand, only drink water or unsweetened tea", source: "practice", action: "do_or_avoid", group: "appointment_day", due_before: { value: 8, unit: "hours" }, band: "high", confidence: 0.89, source_quote: "Please come fasting for the blood draw: don't eat anything in the 8 hours before your appointment, and only drink water or unsweetened tea." }
-    ]
+    results: []
   },
   interfaceState: { ticked: [], reminders_off: [] }
 };
@@ -284,20 +278,67 @@ const FLOW2_EXTRA_NOTE_CONCEPTS = [
 ];
 
 /* ------------------------------- Flow 3 -------------------------------
-   "What's still open" — the Flow 1 fixture revisited: consent already
-   given, a general reminder already set, and the two "prepare_now" items
-   already ticked (the new safety questionnaire, p4, stays open). Entry: the
-   simulated push/lock screen. */
+   "What's still open" — a new appointment the day before: CT Bauch at
+   Radiologie Musterstadt (the same practice as Flow 1), consent already
+   given, a general reminder already set. The referral and previous-findings
+   items are already done; the practice's fasting-for-contrast-agent
+   sentence doesn't say when, so that item stays low confidence and open,
+   with the warning strip, next to the two still-open default items. Entry:
+   the simulated push/lock screen. */
 
 const FLOW3_DE = {
-  context: { ...clone(FLOW1_DE.context), consent_given: true, general_reminders: ["day_before"] },
-  payload: clone(FLOW1_DE.payload),
+  context: {
+    patient_display_name: "Tessa Beispiel",
+    appointment_datetime: "2027-06-15T08:00",
+    practice_name: "Radiologie Musterstadt",
+    practice_contact_lines: ["Musterstraße 1, 12345 Musterstadt", "Telefon 01234 567890"],
+    appointment_type: "CT Bauch",
+    consent_given: true,
+    general_reminders: ["day_before"],
+    default_items: [
+      { id: "d1", title: "Versichertenkarte mitbringen", action: "bring", group: "appointment_day" },
+      { id: "d2", title: "10 Minuten vor dem Termin da sein", action: "do_or_avoid", group: "appointment_day" }
+    ],
+    patient_notes: []
+  },
+  payload: {
+    state: "mixed_confidence",
+    framing: "Hinweise Ihrer Praxis für diese Terminart. Bitte prüfen Sie die markierten Punkte.",
+    error_code: null,
+    results: [
+      { id: "p1", title: "Überweisung im Original besorgen und mitbringen", source: "practice", action: "bring", group: "prepare_now", due_before: null, band: "high", confidence: 0.9, source_quote: "Bitte bringen Sie die Überweisung Ihrer Hausarzt- oder Facharztpraxis im Original mit." },
+      { id: "p2", title: "Vorbefunde mitbringen", source: "practice", action: "bring", group: "prepare_now", due_before: null, band: "high", confidence: 0.83, source_quote: "Falls Sie Vorbefunde haben, bringen Sie diese bitte mit." },
+      { id: "p3", title: "Nüchtern zum Termin kommen", source: "practice", action: "do_or_avoid", group: "appointment_day", due_before: null, band: "low", confidence: 0.42, source_quote: "Je nach Fragestellung kann ein Kontrastmittel nötig sein, in diesem Fall kommen Sie bitte nüchtern." }
+    ]
+  },
   interfaceState: { ticked: ["p1", "p2"], reminders_off: [] }
 };
 
 const FLOW3_EN = {
-  context: { ...clone(FLOW1_EN.context), consent_given: true, general_reminders: ["day_before"] },
-  payload: clone(FLOW1_EN.payload),
+  context: {
+    patient_display_name: "Tessa Beispiel",
+    appointment_datetime: "2027-06-15T08:00",
+    practice_name: "Musterstadt Radiology",
+    practice_contact_lines: ["Musterstraße 1, 12345 Musterstadt", "Phone 01234 567890"],
+    appointment_type: "Abdominal CT",
+    consent_given: true,
+    general_reminders: ["day_before"],
+    default_items: [
+      { id: "d1", title: "Bring your insurance card", action: "bring", group: "appointment_day" },
+      { id: "d2", title: "Arrive 10 minutes before your appointment", action: "do_or_avoid", group: "appointment_day" }
+    ],
+    patient_notes: []
+  },
+  payload: {
+    state: "mixed_confidence",
+    framing: "Information from your practice for this appointment type. Please check the marked items.",
+    error_code: null,
+    results: [
+      { id: "p1", title: "Get the referral and bring the original", source: "practice", action: "bring", group: "prepare_now", due_before: null, band: "high", confidence: 0.9, source_quote: "Please bring the referral from your GP or specialist practice in the original." },
+      { id: "p2", title: "Bring previous findings", source: "practice", action: "bring", group: "prepare_now", due_before: null, band: "high", confidence: 0.83, source_quote: "If you have previous findings, please bring them." },
+      { id: "p3", title: "Come to the appointment fasting", source: "practice", action: "do_or_avoid", group: "appointment_day", due_before: null, band: "low", confidence: 0.42, source_quote: "Depending on the question being examined, a contrast agent may be needed; in that case, please come fasting." }
+    ]
+  },
   interfaceState: { ticked: ["p1", "p2"], reminders_off: [] }
 };
 
@@ -315,7 +356,7 @@ const FLOWS = {
     noteConceptOverrides: FLOW2_NOTE_CONCEPT_OVERRIDES,
     noteExtraConcepts: FLOW2_EXTRA_NOTE_CONCEPTS
   },
-  flow3: { entry: "push", today: "2027-06-09", de: FLOW3_DE, en: FLOW3_EN }
+  flow3: { entry: "push", today: "2027-06-14", de: FLOW3_DE, en: FLOW3_EN }
 };
 
 // Reads the active flow + language's fixture set. FLOW_ID and LANG are set
