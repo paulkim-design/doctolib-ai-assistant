@@ -35,12 +35,10 @@
   --size-action-row: 66px;
   --size-button: 40px;
   --size-avatar: 46px;
+  --size-row-standalone: 55px;
 
   --border-hairline: 1px;
   --border-strong: 2px;
-
-  /* Confidence/AI signaling is text + border only, per brief section 8: never color alone. Matches the KI badge background. */
-  --ai-boundary: var(--slate-800);
 }
 
 * { box-sizing: border-box; }
@@ -74,90 +72,6 @@ button {
 :focus-visible {
   outline: 2px solid var(--blue-interactive);
   outline-offset: 2px;
-}
-
-/* ---------- Prototype chrome (not part of the product UI) ---------- */
-
-.proto-header {
-  width: 100%;
-  max-width: 920px;
-  text-align: center;
-  color: var(--navy-900);
-  font-family: var(--font-display);
-}
-.proto-header h1 { font-size: 18px; margin: 0 0 4px; }
-.proto-header p { margin: 0; font-size: 13px; color: var(--text-muted); font-family: var(--font-text); }
-
-.proto-controls {
-  width: 100%;
-  max-width: 1120px;
-  background: var(--white);
-  border: var(--border-hairline) solid var(--border-card);
-  border-radius: var(--radius-card);
-  padding: 12px 16px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 20px;
-  row-gap: 12px;
-  align-items: center;
-  font-size: 13px;
-}
-.proto-controls .control {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
-}
-.proto-controls label { color: var(--text-muted); font-weight: 500; margin-right: 4px; }
-.proto-controls select {
-  font-family: inherit;
-  font-size: 13px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  border: var(--border-hairline) solid var(--divider);
-  background: var(--white);
-  color: var(--ink-black);
-}
-.proto-controls select:disabled,
-.proto-controls .toggle-field input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.proto-controls .toggle-field {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-}
-.proto-controls .toggle-field input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--blue-interactive);
-  cursor: pointer;
-}
-.proto-controls .frame-badge {
-  margin-left: auto;
-  background: var(--surface-page);
-  color: var(--info-ink);
-  border: var(--border-hairline) solid var(--info-border);
-  border-radius: var(--radius-pill);
-  padding: 4px 10px;
-  font-size: 12px;
-  font-weight: 500;
-}
-.proto-controls button.reset {
-  border: var(--border-hairline) solid var(--divider);
-  border-radius: 6px;
-  padding: 6px 10px;
-  color: var(--slate-700);
-}
-.proto-controls button.reset:hover { background: var(--surface-page); }
-
-/* Below ~1030px the five controls + badge no longer fit on one line; let them
-   wrap onto a second row as a whole group instead of splitting mid-control,
-   and drop the badge's right-pin so it flows with the rest on that row. */
-@media (max-width: 1030px) {
-  .proto-controls .frame-badge { margin-left: 0; }
 }
 
 /* ---------- Device frame ---------- */
@@ -239,6 +153,7 @@ button {
   font-weight: 500;
   flex-shrink: 0;
 }
+.datestrip .ds-item { display: flex; align-items: center; gap: 6px; }
 
 .body-scroll {
   flex: 1;
@@ -248,14 +163,14 @@ button {
 
 .appointment-body {
   background: var(--white);
-  padding: var(--space-16);
 }
 
 .doctor-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 12px;
+  padding: var(--space-16) var(--space-16) 14px;
+  border-bottom: var(--border-hairline) solid var(--divider);
 }
 .doctor-row img {
   width: var(--size-avatar);
@@ -284,51 +199,49 @@ button {
   gap: 24px;
   align-items: center;
   height: var(--size-action-row);
+  padding: 0 var(--space-16);
   border-bottom: var(--border-strong) solid var(--rule-strong);
-  margin-bottom: 4px;
 }
-.actions-row .link { font-size: 14px; font-weight: 500; }
+.actions-row .link { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 500; }
 .actions-row .link.move { color: var(--blue-interactive); }
 .actions-row .link.cancel { color: var(--red); }
 
-.entry-row {
+/* "Dokumente hochladen" / "Vorbereitung": single-row, borderless white cards
+   on the pale page background, per the design system's measured
+   size-row-standalone. */
+.action-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  padding: var(--space-16);
+}
+.action-card {
   display: flex;
   align-items: center;
   gap: 12px;
   width: 100%;
+  min-height: var(--size-row-standalone);
+  background: var(--white);
+  border-radius: var(--radius-card);
+  padding: 0 14px;
   text-align: left;
-  padding: 14px 0;
-  border-bottom: var(--border-hairline) solid var(--divider);
 }
-.entry-row .icon {
-  width: 24px; height: 24px; flex-shrink: 0;
-  color: var(--blue-interactive);
-}
-.entry-row .text { flex: 1; min-width: 0; }
-.entry-row .title { font-size: 15px; font-weight: 500; color: var(--ink-black); }
-.entry-row .subtitle { font-size: 13px; color: var(--text-subtle); margin-top: 2px; }
-.entry-row .chevron { color: var(--text-subtle); font-size: 18px; }
-.entry-row:hover { background: var(--surface-page); }
+.action-card .icon { width: 24px; height: 24px; flex-shrink: 0; color: var(--blue-interactive); }
+.action-card .label { flex: 1; min-width: 0; font-size: 14px; font-weight: 500; color: var(--blue-interactive); }
+.action-card .chevron { color: var(--text-subtle); font-size: 18px; }
+button.action-card:hover { background: var(--surface-page); }
 
 /* ---------- Checklist screen ---------- */
 
-.checklist-header-chip {
-  margin: var(--space-16) var(--space-16) 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--white);
-  border: var(--border-hairline) solid var(--divider);
-  border-radius: var(--radius-pill);
-  padding: 6px 12px;
-  font-size: 12px;
-  color: var(--slate-700);
-  width: fit-content;
-}
-.checklist-header-chip button {
+.reminder-line {
+  display: block;
+  margin: 10px var(--space-16) 0;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--blue-interactive);
-  font-weight: 600;
-  font-size: 12px;
+  text-align: left;
+  padding: 4px 0;
+  min-height: 24px;
 }
 
 .framing {
@@ -409,11 +322,6 @@ button {
   padding: 12px;
   position: relative;
 }
-.item-card.ai {
-  border: 1.5px solid var(--ai-boundary);
-}
-.item-card.done { opacity: 0.6; }
-.item-card.done .item-title { text-decoration: line-through; }
 
 .item-top { display: flex; gap: 10px; align-items: flex-start; }
 .item-checkbox {
@@ -435,26 +343,30 @@ button {
 }
 
 .item-main { flex: 1; min-width: 0; }
-.item-title { font-size: 14px; font-weight: 500; color: var(--ink-black); line-height: 1.4; }
-.item-card.ai .item-main { padding-right: 34px; }
+/* Title is the only bold, dark text in the card; everything else below it
+   steps down in size/weight/color. Tight spacing title → source → quote,
+   more space before the reminder line. */
+.item-title { font-size: 14px; font-weight: 700; color: var(--ink-black); line-height: 1.4; margin-bottom: 2px; }
 
-.ki-badge {
-  position: absolute;
-  top: 10px; right: 10px;
+.item-source {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--text-subtle);
+}
+.ki-badge-inline {
+  display: inline-flex;
+  align-items: center;
   background: var(--slate-800);
   color: var(--white);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.03em;
-  padding: 2px 7px;
+  padding: 1px 5px;
   border-radius: var(--radius-pill);
-}
-
-.label-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
+  flex-shrink: 0;
 }
 .chip {
   display: inline-block;
@@ -464,7 +376,7 @@ button {
   border-radius: var(--radius-pill);
   background: var(--surface-page);
   color: var(--text-muted);
-  border: var(--border-hairline) solid var(--divider);
+  border: var(--border-hairline) solid var(--rule-strong);
 }
 .chip.hedge {
   background: #fff4e0;
@@ -473,7 +385,7 @@ button {
 }
 
 .quote-line {
-  margin-top: 8px;
+  margin-top: 2px;
   font-size: 12.5px;
   color: var(--text-subtle);
   font-style: italic;
@@ -494,19 +406,24 @@ button {
   font-weight: 500;
 }
 
+/* Full-bleed top rule ignoring the card's own padding, with a vertical rule
+   splitting the two buttons. */
 .item-actions {
   display: flex;
-  justify-content: space-between;
-  margin-top: 10px;
-  padding-top: 8px;
+  margin: 10px -12px -12px;
   border-top: var(--border-hairline) solid var(--divider);
 }
 .item-actions button {
+  flex: 1;
+  text-align: center;
   font-size: 12px;
   color: var(--blue-interactive);
   font-weight: 500;
-  padding: 4px 2px;
+  padding: 10px 12px;
   min-height: 24px;
+}
+.item-actions button:first-child {
+  border-right: var(--border-hairline) solid var(--divider);
 }
 
 /* ---------- Notes section ---------- */
@@ -558,12 +475,8 @@ button {
 }
 .info-card p { font-size: 13px; color: var(--slate-700); margin: 2px 0; line-height: 1.5; }
 .info-card .disclaimer { font-size: 11.5px; color: var(--text-subtle); margin-top: 6px; }
-.info-card.urgent {
-  background: #fff1f4;
-  border-color: #ffd0da;
-}
-.info-card.urgent h4 { color: var(--red); }
-.info-card.urgent p { color: #7a0a28; }
+/* Neutral styling, per brief: never alarm/red tones, same card as the
+   contact card. */
 
 .retry-btn {
   margin: 6px var(--space-16) 0;
@@ -695,7 +608,7 @@ button {
 
 textarea.field {
   width: 100%;
-  border: var(--border-hairline) solid var(--divider);
+  border: var(--border-hairline) solid var(--rule-strong);
   border-radius: 10px;
   padding: 10px 12px;
   font-family: inherit;
@@ -712,7 +625,7 @@ textarea.field:focus { border-color: var(--blue-interactive); }
 .example-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; }
 .example-row .ex-label { width: 100%; font-size: 11.5px; color: var(--text-subtle); margin-bottom: 2px; }
 .example-chip {
-  border: var(--border-hairline) solid var(--divider);
+  border: var(--border-hairline) solid var(--rule-strong);
   background: var(--surface-page);
   color: var(--slate-700);
   border-radius: var(--radius-pill);
@@ -747,54 +660,140 @@ textarea.field:focus { border-color: var(--blue-interactive); }
   font-weight: 600;
   text-align: center;
 }
-.dialog .dialog-actions button.cancel { border: var(--border-hairline) solid var(--divider); color: var(--slate-700); }
+.dialog .dialog-actions button.cancel { border: var(--border-hairline) solid var(--rule-strong); color: var(--slate-700); }
 .dialog .dialog-actions button.confirm { background: var(--red); color: var(--white); }
-
-.answer-card {
-  background: var(--surface-page);
-  border: var(--border-hairline) solid var(--info-border);
-  border-radius: var(--radius-card);
-  padding: 14px;
-  margin-top: 16px;
-}
-.answer-card .badges { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
-.answer-card .answer-text { font-size: 14px; color: var(--ink-black); line-height: 1.55; margin: 0 0 10px; }
-.answer-card .src-label { font-size: 12px; color: var(--text-muted); font-weight: 500; margin-bottom: 6px; }
-.answer-card .quote-line { color: var(--info-ink); }
-
-.msg-block { padding: 16px 2px 4px; }
-.msg-block p.msg { font-size: 14px; color: var(--navy-900); font-weight: 600; line-height: 1.5; margin: 0 0 14px; }
 
 .live-region { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
-/* Type pick screen */
-.typepick-options { padding: 6px var(--space-16); display: flex; flex-direction: column; gap: 10px; }
-.typepick-option {
-  display: flex; align-items: center; gap: 12px;
-  border: var(--border-hairline) solid var(--divider);
-  border-radius: var(--radius-card);
-  padding: 13px 14px;
-  background: var(--white);
+/* ---------- Groups & "Erledigt" ---------- */
+
+.group-heading {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--navy-900);
+  margin: 14px var(--space-16) 2px;
+}
+
+/* Done items: no collapse, no strikethrough — always visible, compact rows
+   under a plain small subheading at the end of their group. */
+.done-heading {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-subtle);
+  margin: 10px var(--space-16) 2px;
+}
+.item-card.done-compact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+}
+.item-title-compact { font-size: 14px; color: var(--text-subtle); line-height: 1.4; }
+
+/* ---------- Reminders ---------- */
+
+/* Per-item reminder: one tappable line with a bell icon, "Erinnerung:
+   {current} ›", opening the per-item reminder sheet. Replaces the old on/off
+   switch. */
+.item-reminder-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 14px;
+  padding: 2px 0;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--blue-interactive);
   text-align: left;
+}
+.item-reminder-line .reminder-label { display: flex; align-items: center; gap: 6px; }
+.item-reminder-line .chevron { font-size: 14px; }
+
+.reminder-options { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 14px; }
+.reminder-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 2px;
   font-size: 14px;
   color: var(--ink-black);
 }
-.typepick-option .radio {
-  width: 20px; height: 20px; border-radius: 50%;
-  border: 2px solid var(--slate-700);
-  flex-shrink: 0;
-  position: relative;
+.reminder-option input[type="checkbox"],
+.reminder-option input[type="radio"] {
+  width: 20px; height: 20px;
+  accent-color: var(--slate-800);
 }
-.typepick-option.selected { border-color: var(--blue-interactive); background: var(--surface-page); }
-.typepick-option.selected .radio { border-color: var(--blue-interactive); }
-.typepick-option.selected .radio::after {
-  content: "";
-  position: absolute; inset: 3px;
-  background: var(--blue-interactive);
+
+.day-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin: 2px 0 10px 32px;
+  font-size: 14px;
+  color: var(--ink-black);
+}
+.day-stepper button {
+  width: 32px; height: 32px;
   border-radius: 50%;
+  border: var(--border-hairline) solid var(--rule-strong);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--slate-700);
+  display: flex; align-items: center; justify-content: center;
 }
-.typepick-footer { padding: 10px var(--space-16) 16px; border-top: var(--border-hairline) solid var(--divider); }
-.typepick-footer .footnote { text-align: center; }
+
+.closing-line {
+  padding: 10px var(--space-16) 4px;
+  font-size: 12.5px;
+  color: var(--text-subtle);
+  line-height: 1.5;
+}
+
+/* ---------- Notes section addendum ---------- */
+
+.note-row .note-date { font-size: 11.5px; color: var(--text-subtle); margin: 4px 0 0; }
+
+/* ---------- Simulated push (lock screen) ---------- */
+
+.lockscreen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 110px;
+  background: linear-gradient(180deg, #1b3350, #0c1a27 60%);
+  color: var(--white);
+}
+.lock-time { font-family: var(--font-display); font-size: 64px; font-weight: 700; line-height: 1; }
+.lock-date { font-size: 15px; margin-top: 6px; color: rgba(255,255,255,0.85); }
+
+.notification-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: calc(100% - 32px);
+  margin-top: 56px;
+  background: rgba(255,255,255,0.14);
+  border: var(--border-hairline) solid rgba(255,255,255,0.3);
+  border-radius: 14px;
+  padding: 12px 14px;
+  text-align: left;
+  backdrop-filter: blur(6px);
+}
+.notif-icon {
+  width: 32px; height: 32px;
+  min-width: 32px;
+  border-radius: 8px;
+  background: var(--blue-primary);
+  color: var(--white);
+  display: flex; align-items: center; justify-content: center;
+}
+.notif-text { min-width: 0; }
+.notif-title { font-size: 12.5px; font-weight: 700; color: rgba(255,255,255,0.75); text-transform: uppercase; letter-spacing: 0.02em; }
+.notif-body { font-size: 14px; color: var(--white); margin-top: 2px; line-height: 1.4; }
 
 @media (max-width: 420px) {
   .device { border-radius: 0; border-width: 0; height: 100dvh; max-height: 100dvh; width: 100%; }
