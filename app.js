@@ -165,12 +165,12 @@ const COPY = {
   cancel: { de: "Abbrechen", en: "Cancel" },
 
   whyDefault: {
-    de: (type) => `Dieser Punkt steht auf der allgemeinen Liste für die Terminart „${type}". Die Liste wird von Doctolib erstellt und medizinisch geprüft.`,
-    en: (type) => `This item is on the general list for the appointment type "${type}". The list is created by Doctolib and medically reviewed.`
+    de: (type) => `Dieser Punkt steht auf der allgemeinen Liste für die Terminart „${type}“. Die Liste wird von Doctolib erstellt und medizinisch geprüft.`,
+    en: (type) => `This item is on the general list for the appointment type “${type}”. The list is created by Doctolib and medically reviewed.`
   },
   whyPracticeIntro: {
-    de: (practice, type) => `Eine KI hat diesen Punkt in den Informationen von ${practice} zur Terminart „${type}" gefunden. Er stammt aus diesem Satz:`,
-    en: (practice, type) => `An AI found this item in ${practice}'s information for the appointment type "${type}". It comes from this sentence:`
+    de: (practice, type) => `Eine KI hat diesen Punkt in den Informationen von ${practice} zur Terminart „${type}“ gefunden. Er stammt aus diesem Satz:`,
+    en: (practice, type) => `An AI found this item in ${practice}'s information for the appointment type “${type}”. It comes from this sentence:`
   },
   whyPracticeLowNote: {
     de: "Der Satz ist nicht eindeutig. Bitte klären Sie mit Ihrer Praxis, ob er für Sie gilt.",
@@ -189,8 +189,8 @@ const COPY = {
     en: (when) => `Reminder: ${when}. The time is stated in the quoted text.`
   },
   whyReminderFromDefault: {
-    de: (when, group) => `Erinnerung: ${when}. Der Text nennt keinen Zeitpunkt, deshalb gilt der Standard für „${group}".`,
-    en: (when, group) => `Reminder: ${when}. The text doesn't name a time, so the default for "${group}" applies.`
+    de: (when, group) => `Erinnerung: ${when}. Der Text nennt keinen Zeitpunkt, deshalb gilt der Standard für „${group}“.`,
+    en: (when, group) => `Reminder: ${when}. The text doesn't name a time, so the default for “${group}” applies.`
   },
   whyReminderUnclear: {
     de: (when) => `Erinnerung: ${when}. Ihre Notiz nennt keinen Zeitpunkt.`,
@@ -201,8 +201,8 @@ const COPY = {
     en: "Your note doesn't name a time. Please check with your practice when to pause the medication."
   },
 
-  feedbackQuestionPractice: { de: "Passt dieser Punkt zum Text oben?", en: "Does this item match the text above?" },
-  feedbackQuestionNote: { de: "Passt dieser Punkt zu Ihrer Notiz?", en: "Does this item match your note?" },
+  feedbackQuestionPractice: { de: "Gibt dieser Punkt den Satz richtig wieder?", en: "Does this item reflect the sentence correctly?" },
+  feedbackQuestionNote: { de: "Gibt dieser Punkt Ihre Notiz richtig wieder?", en: "Does this item reflect your note correctly?" },
   yes: { de: "Ja", en: "Yes" },
   no: { de: "Nein", en: "No" },
   feedbackThanks: { de: "Danke für Ihre Rückmeldung.", en: "Thanks for your feedback." },
@@ -401,6 +401,12 @@ function esc(str) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+// Typographic quotes around a verbatim quote, language-aware: German uses
+// „...“, English uses “...” — never a straight ".
+function quoteWrap(text) {
+  return LANG === "de" ? `„${text}“` : `“${text}”`;
 }
 
 function todayISO() {
@@ -1010,7 +1016,7 @@ function renderItemCard(item, compact) {
 
   let quote = "";
   if (isAi) {
-    quote = `<p class="quote-line" id="quote-${item.id}">„${esc(item.source_quote)}"</p>
+    quote = `<p class="quote-line" id="quote-${item.id}">${quoteWrap(esc(item.source_quote))}</p>
       <button class="quote-toggle" data-action="toggle-quote" data-id="${item.id}">${esc(t("showMore"))}</button>`;
   }
 
@@ -1247,11 +1253,11 @@ function renderWhySheet() {
   if (kind === "default") {
     body = `<p class="body-text">${esc(t("whyDefault", state.ctx.appointment_type))}</p>`;
   } else if (kind === "practice-high" || kind === "practice-low") {
-    body = `<p class="body-text">${esc(t("whyPracticeIntro", state.ctx.practice_name, state.ctx.appointment_type))}</p><p class="quote-line" style="-webkit-line-clamp:unset;">„${esc(item.source_quote)}"</p>`;
+    body = `<p class="body-text">${esc(t("whyPracticeIntro", state.ctx.practice_name, state.ctx.appointment_type))}</p><p class="quote-line" style="-webkit-line-clamp:unset;">${quoteWrap(esc(item.source_quote))}</p>`;
     if (kind === "practice-low") body += `<p class="body-text">${esc(t("whyPracticeLowNote"))}</p>`;
   } else {
     // note and unclear both reuse the note explanation
-    body = `<p class="body-text">${esc(t("whyNoteIntro"))}</p><p class="quote-line" style="-webkit-line-clamp:unset;">„${esc(item.source_quote)}"</p><p class="body-text">${esc(t("whyNoteFootnote"))}</p>`;
+    body = `<p class="body-text">${esc(t("whyNoteIntro"))}</p><p class="quote-line" style="-webkit-line-clamp:unset;">${quoteWrap(esc(item.source_quote))}</p><p class="body-text">${esc(t("whyNoteFootnote"))}</p>`;
   }
   const defaultDays = reminderDueDays(item);
   if (defaultDays !== null && effectiveReminder(item) !== null) {
@@ -1273,7 +1279,7 @@ function renderWhySheet() {
       <div class="sheet-title-row"><h2 id="why-title">${esc(t("whySeeThis"))}</h2></div>
       ${body}
       ${renderFeedbackBlock(kind, item)}
-      <div class="sheet-actions"><button class="btn-primary" data-action="close-sheet">${esc(t("close"))}</button></div>
+      <div class="sheet-actions"><button class="btn-secondary" data-action="close-sheet">${esc(t("close"))}</button></div>
     </div>
   </div>`;
 }
@@ -1322,8 +1328,8 @@ function renderFeedbackBlock(kind, item) {
   return `<div class="why-feedback">
     <p class="feedback-question">${esc(question)}</p>
     <div class="feedback-actions">
-      <button class="feedback-link" data-action="feedback-yes" data-id="${item.id}">${esc(t("yes"))}</button>
-      <button class="feedback-link" data-action="feedback-no">${esc(t("no"))}</button>
+      <button class="feedback-link feedback-yesno" data-action="feedback-yes" data-id="${item.id}">${esc(t("yes"))}</button>
+      <button class="feedback-link feedback-yesno" data-action="feedback-no">${esc(t("no"))}</button>
     </div>
   </div>`;
 }
