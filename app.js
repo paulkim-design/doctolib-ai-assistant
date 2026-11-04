@@ -69,8 +69,8 @@ const COPY = {
 
   coldStartHeading: { de: "Für diesen Termin gibt es noch keine Vorbereitungsinfos.", en: "There's no preparation info for this appointment yet." },
   coldStartNoteInvite: {
-    de: "Hat Ihnen Ihre Praxis etwas zur Vorbereitung gesagt? Notieren Sie es hier.",
-    en: "Did your practice tell you anything about preparation? Note it down here."
+    de: "Möchten Sie etwas für den Termin vorbereiten? Notieren Sie es hier.",
+    en: "Want to prepare something for the appointment? Note it down here."
   },
 
   noResultSubline: { de: "Die allgemeine Liste für diese Terminart:", en: "The general list for this appointment type:" },
@@ -92,6 +92,7 @@ const COPY = {
   whenOneDayBefore: { de: "1 Tag vorher", en: "1 day before" },
   whenNDaysBefore: { de: (n) => `${n} Tage vorher`, en: (n) => `${n} days before` },
   noReminderOption: { de: "Keine Erinnerung", en: "No reminder" },
+  reminderCheckWithPracticeSuffix: { de: " · Zeitpunkt mit Praxis klären", en: " · Check timing with your practice" },
   otherReminderOption: { de: "Andere …", en: "Other …" },
   decreaseDays: { de: "Weniger Tage", en: "Fewer days" },
   increaseDays: { de: "Mehr Tage", en: "More days" },
@@ -107,12 +108,9 @@ const COPY = {
   reminderOption_day_before: { de: "1 Tag vorher", en: "1 day before" },
   reminderOption_hour_before: { de: "1 Stunde vorher", en: "1 hour before" },
 
-  notesHeading: { de: "Ihre Vorbereitungsnotizen", en: "Your preparation notes" },
   notedOn: { de: (date) => `Notiert am ${date}`, en: (date) => `Noted on ${date}` },
-  edit: { de: "Bearbeiten", en: "Edit" },
   delete: { de: "Löschen", en: "Delete" },
-  editNoteAriaLabel: { de: (text) => `Notiz bearbeiten: ${text}`, en: (text) => `Edit note: ${text}` },
-  deleteNoteAriaLabel: { de: (text) => `Notiz löschen: ${text}`, en: (text) => `Delete note: ${text}` },
+  deleteNoteButton: { de: "Notiz löschen", en: "Delete note" },
   notesFootnote: { de: "Ihre Notizen werden nach dem Termin gelöscht.", en: "Your notes will be deleted after the appointment." },
   noteDeletedLive: { de: "Notiz gelöscht.", en: "Note deleted." },
 
@@ -155,8 +153,8 @@ const COPY = {
   addNoteTitle: { de: "Vorbereitungsnotiz hinzufügen", en: "Add preparation note" },
   editNoteTitle: { de: "Vorbereitungsnotiz bearbeiten", en: "Edit preparation note" },
   noteComposerIntro: {
-    de: "Notieren Sie, was Ihre Praxis Ihnen zur Vorbereitung gesagt hat, zum Beispiel beim letzten Termin.",
-    en: "Note down what your practice told you about preparation, for example at your last appointment."
+    de: "Notieren Sie, was Sie für den Termin vorbereiten, mitbringen oder erledigen möchten.",
+    en: "Note what you'd like to prepare, bring or do for the appointment."
   },
   noteComposerDismissHint: {
     de: "Brauchen Sie einen Punkt nicht? Tippen Sie bei dem Punkt auf „Trifft auf mich nicht zu“.",
@@ -273,14 +271,14 @@ const FRAMING = {
   error: { any: { de: "Die Informationen Ihrer Praxis konnten nicht geladen werden.", en: "Your practice's information couldn't be loaded." } }
 };
 
-// high_confidence/mixed_confidence/low_confidence are derived from the
-// bands actually present in results, not trusted as a static fixture field.
-// Unclear notes are excluded: the system couldn't turn them into an item at
-// all, so they're not something to "check," and must never trigger the
-// mixed/low-confidence "Bitte prüfen" framing, or payload.state, by
-// themselves. Shared by computeFraming() and recomputePayloadState().
+// high_confidence/mixed_confidence/low_confidence are derived only from
+// practice items' bands, not trusted as a static fixture field. Note items
+// (including unclear ones) never count here: a patient's own note, however
+// unclear or unscheduled, is never something to flag as "Bitte prüfen" at
+// the framing level — only an unclear practice sentence is. Shared by
+// computeFraming() and recomputePayloadState().
 function effectiveConfidenceState(results) {
-  const bands = results.filter((r) => r.action !== "unclear").map((r) => r.band);
+  const bands = results.filter((r) => r.source === "practice").map((r) => r.band);
   const hasHigh = bands.includes("high");
   const hasLow = bands.includes("low");
   return hasHigh && hasLow ? "mixed_confidence" : hasLow ? "low_confidence" : "high_confidence";
@@ -341,6 +339,9 @@ function reminderDueDays(item) {
   // actually follow it, unlike most "on the day" defaults — 1 day before,
   // not 1 hour before.
   if (item.fasting) return 1;
+  // A medication pause with no stated time can't be scheduled at all —
+  // 1 week before, so there's time to ask the practice first.
+  if (item.needsPracticeCheck) return 7;
   if (item.group === "prepare_now") return daysUntilAppointment() < 7 ? null : 7;
   if (item.group === "before_appointment") return 3;
   return 0; // appointment_day
@@ -503,8 +504,7 @@ function freshState() {
     itemReminderTarget: null, // per-item reminder sheet's target item id
     itemReminderDraft: null, // per-item reminder sheet's in-progress choice key
     itemReminderOtherDays: null, // "Andere …" stepper's in-progress day count
-    liveMessage: "",
-    focusNotesHeadingNext: false
+    liveMessage: ""
   };
 }
 
@@ -639,10 +639,15 @@ function enterChecklistFlow() {
 
 // Splits a note into sentences, so a day/hour count only applies to the
 // concept named in that same sentence, not the whole note.
+// "Dr." reads as a sentence end to a plain split-on-punctuation regex, which
+// would truncate a note mid-sentence — now visible as a title verbatim
+// (simulatedItemForNote's verbatimWhenUnclear), not just used for matching.
+// Protect it, split, then restore the period.
 function splitSentences(text) {
-  const parts = text
+  const protectedText = text.replace(/\bDr\.(?=\s*[A-ZÄÖÜ])/g, "Dr\u0001");
+  const parts = protectedText
     .split(/(?<=[.!?])\s+/)
-    .map((s) => s.trim())
+    .map((s) => s.trim().replace(/\u0001/g, "."))
     .filter((s) => s.length > 0);
   return parts.length > 0 ? parts : [text];
 }
@@ -668,6 +673,13 @@ function extractDueBefore(sentence) {
     if (n >= 1 && n <= 72) return { value: n, unit: "hours" };
   }
   return null;
+}
+
+// The patient's own sentence, used verbatim as an item title (medication
+// pause with no stated time) — trimmed, with only the trailing sentence
+// punctuation dropped, nothing else reworded.
+function cleanSentenceForTitle(sentence) {
+  return sentence.trim().replace(/[.!?]+$/, "");
 }
 
 // Simulates the AI extraction step for a note: there is no live NLP.
@@ -701,9 +713,13 @@ function simulatedItemForNote(note) {
     const overridden = c.resolveOverride ? c.resolveOverride(sentence, dueBefore) : null;
     const resolvedItem = overridden || c.item;
     const lowConfidence = overridden ? overridden.lowConfidence : c.requiresTime && !dueBefore;
+    // A concept flagged verbatimWhenUnclear (medication pause) never invents
+    // wording like "wie besprochen" for a sentence with no stated time — the
+    // patient's own sentence becomes the title instead.
+    const needsPracticeCheck = lowConfidence && !!c.verbatimWhenUnclear;
     items.push({
       id: `sim-${note.id}-${c.key}`,
-      title: resolvedItem.title,
+      title: needsPracticeCheck ? cleanSentenceForTitle(sentence) : resolvedItem.title,
       source: "patient",
       action: resolvedItem.action,
       group: resolvedItem.group,
@@ -711,6 +727,7 @@ function simulatedItemForNote(note) {
       band: lowConfidence ? "low" : "high",
       confidence: lowConfidence ? 0.4 : 0.8,
       fasting: !!c.fasting,
+      needsPracticeCheck,
       source_quote: note.text
     });
   });
@@ -782,14 +799,6 @@ function render() {
 
   const live = document.getElementById("live-region");
   live.textContent = state.liveMessage;
-
-  if (state.focusNotesHeadingNext) {
-    state.focusNotesHeadingNext = false;
-    requestAnimationFrame(() => {
-      const h = document.getElementById("notes-heading");
-      if (h) h.focus();
-    });
-  }
 }
 
 function renderStatusAndAppbar() {
@@ -909,7 +918,9 @@ function renderChecklist() {
   else if (isColdStart()) body = renderColdStartBody();
   else body = renderResolvedBody();
 
-  return `<div class="body-scroll">${body}</div>${renderFooter()}`;
+  // The cold-start screen's own button is the only way to add a note while
+  // nothing exists yet; the footer's "+ Add note" returns once items do.
+  return `<div class="body-scroll">${body}</div>${isColdStart() ? "" : renderFooter()}`;
 }
 
 // Brief §3's state table: waiting shows "default items in their groups," not
@@ -942,7 +953,6 @@ function renderWaitingBody() {
     </div></div>
     <p class="framing sub" style="padding-top:0;">${esc(t("waitingSubline"))}</p>
     ${body}
-    ${renderNotesSection()}
   `;
 }
 
@@ -968,7 +978,6 @@ function renderColdStartBody() {
       ${renderContactCard()}
       ${renderUrgentCard()}
     </div>
-    ${renderNotesSection()}
   `;
 }
 
@@ -983,7 +992,6 @@ function renderResolvedBody() {
     <div class="framing"><h2>${esc(computeFraming())}</h2>${sub}</div>
     ${ungroupedHtml}
     ${groupsHtml}
-    ${renderNotesSection()}
     ${anyVisible ? `<p class="closing-line">${esc(t("closingLine"))}</p>` : ""}
   `;
 }
@@ -1028,10 +1036,11 @@ function renderItemCard(item, compact) {
   const st = state.itemState[item.id] || { ticked: false, hidden: false };
   const kind = itemKind(item);
   const isAi = kind === "practice-high" || kind === "practice-low" || kind === "note" || kind === "note-low";
-  // Unclear notes aren't "low confidence" to check — they're notes the
-  // system couldn't turn into an item at all, shown as typed. No strip, no
-  // warm outline, just a normal card.
-  const isLowConfidence = kind === "practice-low" || kind === "note-low";
+  // The strip/warm outline is only for an unclear PRACTICE sentence. Note
+  // items (note-low, unclear) never get it, whatever their own band — a
+  // patient's own note is never something to flag as "Bitte prüfen" on the
+  // card itself.
+  const isLowConfidence = kind === "practice-low";
   if (st.hidden) {
     return `
     <div class="item-card dismissed" data-item-id="${item.id}">
@@ -1104,34 +1113,14 @@ function renderItemReminderLine(item) {
   if (defaultDays === null) return "";
   const eff = effectiveReminder(item);
   const label = eff === null ? t("noReminderOption") : labelForReminder(eff);
+  // Only while the special 1-week default is still in effect — the suffix
+  // is about the timing itself being unclear, not about any particular
+  // reminder choice the patient might pick instead.
+  const suffix = item.needsPracticeCheck && !state.reminderOverrides.has(item.id) ? t("reminderCheckWithPracticeSuffix") : "";
   return `<button class="item-reminder-line" data-action="open-item-reminder" data-id="${item.id}">
-    <span class="reminder-label"><svg class="bell-icon" viewBox="0 0 24 24" fill="none" width="14" height="14" aria-hidden="true"><path d="M12 3a6 6 0 0 0-6 6v3.2c0 .6-.2 1.2-.6 1.7L4 16h16l-1.4-2.1c-.4-.5-.6-1.1-.6-1.7V9a6 6 0 0 0-6-6Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9.5 19a2.5 2.5 0 0 0 5 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>${esc(t("reminderPrefix"))}: ${esc(label)}</span>
+    <span class="reminder-label"><svg class="bell-icon" viewBox="0 0 24 24" fill="none" width="14" height="14" aria-hidden="true"><path d="M12 3a6 6 0 0 0-6 6v3.2c0 .6-.2 1.2-.6 1.7L4 16h16l-1.4-2.1c-.4-.5-.6-1.1-.6-1.7V9a6 6 0 0 0-6-6Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9.5 19a2.5 2.5 0 0 0 5 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>${esc(t("reminderPrefix"))}: ${esc(label)}${esc(suffix)}</span>
     <span class="chevron" aria-hidden="true">›</span>
   </button>`;
-}
-
-function renderNotesSection() {
-  const notes = state.ctx.patient_notes;
-  if (notes.length === 0) return "";
-  const rows = notes
-    .map(
-      (n) => `
-    <div class="note-row">
-      <div class="text">${esc(n.text)}</div>
-      <p class="note-date">${esc(t("notedOn", formatNoteDate(n.created_on)))}</p>
-      <div class="row-actions">
-        <button data-action="edit-note" data-id="${n.id}" aria-label="${esc(t("editNoteAriaLabel", n.text.slice(0, 40)))}">${esc(t("edit"))}</button>
-        <button class="delete" data-action="delete-note" data-id="${n.id}" aria-label="${esc(t("deleteNoteAriaLabel", n.text.slice(0, 40)))}">${esc(t("delete"))}</button>
-      </div>
-    </div>`
-    )
-    .join("");
-  return `
-  <div class="notes-section">
-    <h3 id="notes-heading" tabindex="-1">${esc(t("notesHeading"))}</h3>
-    ${rows}
-    <p class="notes-footnote">${esc(t("notesFootnote"))}</p>
-  </div>`;
 }
 
 function renderContactCard() {
@@ -1153,12 +1142,9 @@ function renderUrgentCard() {
 }
 
 function renderFooter() {
-  const notes = state.ctx.patient_notes;
-  const atLimit = notes.length >= 5;
   return `
   <div class="checklist-footer">
-    <button data-action="open-note-composer" ${atLimit ? "disabled" : ""}>${esc(t("addNote"))}</button>
-    ${atLimit ? `<span class="notes-limit-msg">${esc(t("noteLimitMsg"))}</span>` : ""}
+    <button data-action="open-note-composer">${esc(t("addNote"))}</button>
   </div>`;
 }
 
@@ -1214,16 +1200,24 @@ function renderConsentSheet() {
 function renderNoteComposerSheet() {
   const nc = state.noteComposer;
   const isAdd = nc.mode === "add";
+  const atLimit = isAdd && state.ctx.patient_notes.length >= 5;
   const title = isAdd ? t("addNoteTitle") : t("editNoteTitle");
   let examples = "";
   if (isAdd) {
-    // Only the one universal chip — participants write the note themselves,
-    // so no flow-specific chip hands them the answer.
-    const chips = [NOTE_EXAMPLES.vaccineCard[LANG]];
+    // Each chip matches an existing NOTE_CONCEPTS keyword, so saving it as
+    // typed produces that concept's item.
+    const chips = [NOTE_EXAMPLES.insuranceCard[LANG], NOTE_EXAMPLES.referral[LANG], NOTE_EXAMPLES.medicationList[LANG], NOTE_EXAMPLES.vaccineCard[LANG]];
     examples = `<div class="example-row">
         <span class="ex-label">${esc(t("examplesLabel"))}</span>
         ${chips.map((c) => `<button class="example-chip" data-action="fill-example-note" data-text="${esc(c)}">${esc(c)}</button>`).join("")}
       </div>`;
+  }
+  // The notes section was removed from the checklist: a note's date, the
+  // deletion footnote and "Notiz löschen" now live here, only in edit mode.
+  let editMeta = "";
+  if (!isAdd) {
+    const note = state.ctx.patient_notes.find((n) => n.id === nc.editingId);
+    if (note) editMeta = `<p class="note-date">${esc(t("notedOn", formatNoteDate(note.created_on)))}</p>`;
   }
   return `
   <div class="backdrop" data-action="close-sheet-backdrop">
@@ -1235,6 +1229,7 @@ function renderNoteComposerSheet() {
       </div>
       <p class="intro">${esc(t("noteComposerIntro"))}</p>
       <p class="intro">${esc(t("noteComposerDismissHint"))}</p>
+      ${editMeta}
       <div class="field-label-row">
         <label for="note-field">${esc(t("noteFieldLabel"))}</label>
         <span class="counter">${nc.text.length}/160</span>
@@ -1243,10 +1238,13 @@ function renderNoteComposerSheet() {
       <div class="validation-msg">${nc.error ? esc(nc.error) : ""}</div>
       ${examples}
       <p class="helper-text">${esc(t("noteHelperText"))}</p>
+      ${!isAdd ? `<p class="helper-text">${esc(t("notesFootnote"))}</p>` : ""}
+      ${atLimit ? `<p class="notes-limit-msg">${esc(t("noteLimitMsg"))}</p>` : ""}
       <div class="sheet-actions">
-        <button class="btn-primary" data-action="save-note">${esc(t("save"))}</button>
+        <button class="btn-primary" data-action="save-note" ${atLimit ? "disabled" : ""}>${esc(t("save"))}</button>
         <button class="btn-text" data-action="close-sheet">${esc(t("cancel"))}</button>
       </div>
+      ${!isAdd ? `<button class="delete-note-btn" data-action="delete-note" data-id="${nc.editingId}">${esc(t("deleteNoteButton"))}</button>` : ""}
     </div>
   </div>`;
 }
@@ -1608,11 +1606,6 @@ function onRootClick(e) {
     case "open-note-composer":
       openSheet("notecomposer", { noteComposer: { mode: "add", editingId: null, text: "", error: "" } });
       break;
-    case "edit-note": {
-      const note = state.ctx.patient_notes.find((n) => n.id === el.dataset.id);
-      openSheet("notecomposer", { noteComposer: { mode: "edit", editingId: note.id, text: note.text, error: "" } });
-      break;
-    }
     case "fill-example-note":
       state.noteComposer.text = el.dataset.text;
       render();
@@ -1654,9 +1647,9 @@ function onRootClick(e) {
       state.ctx.patient_notes = state.ctx.patient_notes.filter((n) => n.id !== state.deleteTarget);
       state.deleteTarget = null;
       state.dialog = null;
+      state.sheet = null; // also closes the note composer the delete was triggered from
       recomputePayloadState();
       state.liveMessage = t("noteDeletedLive");
-      state.focusNotesHeadingNext = true;
       runModelReRun();
       break;
     }
