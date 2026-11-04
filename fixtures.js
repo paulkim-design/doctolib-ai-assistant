@@ -50,6 +50,10 @@ const NOTE_CONCEPTS = [
   {
     key: "medication_pause",
     keywords: ["pausier", "absetz", "weglassen", "nicht nehmen", "pause", "stop taking"],
+    // Pausing a medication is meaningless without knowing when, unlike e.g.
+    // "bring your insurance card" — so this concept alone drops to low
+    // confidence ("Bitte prüfen") when its sentence names no day/hour count.
+    requiresTime: true,
     item: {
       de: { title: "Medikament wie besprochen pausieren", action: "do_or_avoid", group: "before_appointment" },
       en: { title: "Pause medication as discussed", action: "do_or_avoid", group: "before_appointment" }
@@ -96,9 +100,14 @@ const NOTE_CONCEPTS = [
 ];
 
 // Resolves NOTE_CONCEPTS plus the active flow's overrides/extra concepts
-// (e.g. Flow 2's specific medication-pause wording and its water concept)
-// into a flat, language-resolved list ready for matching. FLOW_ID and LANG
-// are set once by app.js at boot.
+// into a flat list ready for matching. An override (e.g. Flow 2's
+// medication-pause wording) is a `resolve(sentence, dueBefore)` function,
+// not a fixed item — simulatedItemForNote() (app.js) calls it with the
+// matched sentence and the extracted due time, and it returns null (use the
+// concept's generic item) or a fully-formed { title, action, group,
+// lowConfidence }, built only from what that sentence actually says. FLOW_ID
+// and LANG are set once by app.js at boot; resolve functions read LANG
+// directly since their wording depends on it too.
 function resolvedNoteConcepts() {
   const flow = FLOWS[FLOW_ID];
   const overrides = flow.noteConceptOverrides || {};
@@ -108,9 +117,11 @@ function resolvedNoteConcepts() {
     keywords: c.keywords,
     wholeWord: c.wholeWord,
     noItem: c.noItem,
-    item: overrides[c.key] ? overrides[c.key][LANG] : c.item ? c.item[LANG] : null
+    requiresTime: c.requiresTime,
+    item: c.item ? c.item[LANG] : null,
+    resolveOverride: overrides[c.key] ? overrides[c.key].resolve : null
   }));
-  extras.forEach((c) => base.push({ key: c.key, keywords: c.keywords, wholeWord: c.wholeWord, noItem: c.noItem, item: c.item[LANG] }));
+  extras.forEach((c) => base.push({ key: c.key, keywords: c.keywords, wholeWord: c.wholeWord, noItem: c.noItem, requiresTime: c.requiresTime, item: c.item[LANG], resolveOverride: null }));
   return base;
 }
 
@@ -236,10 +247,28 @@ const FLOW2_EN = {
   interfaceState: { ticked: [], reminders_off: [] }
 };
 
+// The medication-pause title uses whatever the note actually says, not a
+// fixed scenario string: mentioning the blood thinner and a day count names
+// that count; mentioning the blood thinner with no day count still names the
+// medication (more specific than the fully generic item) but can't claim a
+// timing it doesn't have, so it stays low confidence with the same
+// "doesn't name a time" why-sheet copy as the generic case. No mention of
+// the blood thinner at all falls through to the fully generic item instead.
 const FLOW2_NOTE_CONCEPT_OVERRIDES = {
   medication_pause: {
-    de: { title: "Blutverdünner 2 Tage vorher pausieren", action: "do_or_avoid", group: "before_appointment", due_before: { value: 2, unit: "days" } },
-    en: { title: "Pause blood thinner 2 days before", action: "do_or_avoid", group: "before_appointment", due_before: { value: 2, unit: "days" } }
+    resolve: (sentence, dueBefore) => {
+      if (!/blutverdünner|blood thinner/i.test(sentence)) return null;
+      const hasDayCount = dueBefore != null && dueBefore.unit === "days";
+      const title =
+        LANG === "de"
+          ? hasDayCount
+            ? `Blutverdünner ${dueBefore.value} Tage vorher pausieren`
+            : "Blutverdünner wie besprochen pausieren"
+          : hasDayCount
+            ? `Pause blood thinner ${dueBefore.value} days before`
+            : "Pause blood thinner as discussed";
+      return { title, action: "do_or_avoid", group: "before_appointment", lowConfidence: !hasDayCount };
+    }
   }
 };
 

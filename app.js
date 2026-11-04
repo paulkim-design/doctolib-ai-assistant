@@ -188,6 +188,10 @@ const COPY = {
     de: (when) => `Erinnerung: ${when}. Ihre Notiz nennt keinen Zeitpunkt.`,
     en: (when) => `Reminder: ${when}. Your note doesn't name a time.`
   },
+  whyMedicationPauseUnclear: {
+    de: "Ihre Notiz nennt keinen Zeitpunkt. Bitte klären Sie mit Ihrer Praxis, wann Sie das Medikament pausieren.",
+    en: "Your note doesn't name a time. Please check with your practice when to pause the medication."
+  },
 
   deleteNoteTitle: { de: "Notiz löschen?", en: "Delete note?" },
   deleteNoteBody: {
@@ -451,7 +455,7 @@ function itemKind(item) {
   if (item.source === "default") return "default";
   if (item.source === "practice") return item.band === "high" ? "practice-high" : "practice-low";
   if (item.action === "unclear") return "unclear";
-  return "note";
+  return item.band === "high" ? "note" : "note-low";
 }
 
 // Dismissed ("Trifft auf mich nicht zu") items stay in the list — they
@@ -605,12 +609,18 @@ function extractDueBefore(sentence) {
 // German and English) against the sentence they appear in — mentioning a
 // concept produces that concept's fixture item, quoted with what the patient
 // actually wrote, using a day/hour count from that same sentence if it names
-// one. A concept flagged noItem (the insurance card, already a default item)
-// is recognized but produces nothing, per the system prompt's
-// duplicate-avoidance rule. If nothing at all matches, the note becomes the
-// low-confidence "unclear note" item instead of a guess (system prompt §4).
-// Always returns an array (possibly empty) of result-shaped objects sharing
-// source_quote = the full note text.
+// one (never fabricated). A flow's resolveOverride for a concept (e.g. Flow
+// 2's medication-pause wording) gets the matched sentence and extracted due
+// time and returns null (use the generic item) or a fully-formed item
+// (including its own lowConfidence verdict) built only from what that
+// sentence says. Otherwise a concept flagged requiresTime (medication pause:
+// meaningless without a time) drops to low confidence, with the hedge, when
+// its sentence names no day/hour count. A concept flagged noItem (the
+// insurance card, already a default item) is recognized but produces
+// nothing, per the system prompt's duplicate-avoidance rule. If nothing at
+// all matches, the note becomes the low-confidence "unclear note" item
+// instead of a guess (system prompt §4). Always returns an array (possibly
+// empty) of result-shaped objects sharing source_quote = the full note text.
 function simulatedItemForNote(note) {
   const sentences = splitSentences(note.text);
   const concepts = resolvedNoteConcepts();
@@ -621,15 +631,19 @@ function simulatedItemForNote(note) {
     if (!sentence) return;
     anyMatched = true;
     if (c.noItem) return;
+    const dueBefore = extractDueBefore(sentence);
+    const overridden = c.resolveOverride ? c.resolveOverride(sentence, dueBefore) : null;
+    const resolvedItem = overridden || c.item;
+    const lowConfidence = overridden ? overridden.lowConfidence : c.requiresTime && !dueBefore;
     items.push({
       id: `sim-${note.id}-${c.key}`,
-      title: c.item.title,
+      title: resolvedItem.title,
       source: "patient",
-      action: c.item.action,
-      group: c.item.group,
-      due_before: extractDueBefore(sentence) || c.item.due_before || null,
-      band: "high",
-      confidence: 0.8,
+      action: resolvedItem.action,
+      group: resolvedItem.group,
+      due_before: dueBefore,
+      band: lowConfidence ? "low" : "high",
+      confidence: lowConfidence ? 0.4 : 0.8,
       source_quote: note.text
     });
   });
@@ -682,6 +696,13 @@ function render() {
     if (sh) sh.classList.add("enter");
   }
   prevSheet = state.sheet || null;
+
+  // "Mehr anzeigen" only makes sense when the 2-line clamp is actually
+  // cutting the quote off — a short quote that already fits gets no toggle.
+  screen.querySelectorAll(".quote-toggle").forEach((btn) => {
+    const quoteEl = document.getElementById("quote-" + btn.dataset.id);
+    if (quoteEl && quoteEl.scrollHeight <= quoteEl.clientHeight + 1) btn.style.display = "none";
+  });
 
   const checklistArrived = state.screen === "checklist" && prevPhase === "waiting" && state.checklistPhase === "resolved";
   prevPhase = state.screen === "checklist" ? state.checklistPhase : null;
@@ -876,20 +897,27 @@ function renderGroupSection(groupId, items) {
   if (items.length === 0) return "";
   const open = items.filter((it) => !(state.itemState[it.id] && state.itemState[it.id].ticked));
   const done = items.filter((it) => state.itemState[it.id] && state.itemState[it.id].ticked);
+  const dismissed = items.filter((it) => state.itemState[it.id] && state.itemState[it.id].hidden);
   return `
   <div class="group-section">
     <h3 class="group-heading">${esc(t("group_" + groupId))}</h3>
     <div class="item-list">${open.map((it) => renderItemCard(it)).join("")}</div>
     ${done.length ? `<div class="done-heading">${esc(t("doneHeading"))}</div><div class="item-list">${done.map((it) => renderItemCard(it, true)).join("")}</div>` : ""}
+    ${dismissed.length ? `<div class="item-list">${dismissed.map((it) => renderItemCard(it)).join("")}</div>` : ""}
   </div>`;
 }
 
 // `compact`: true for a ticked item — always visible (no collapse), just a
-// muted checkbox+title row, no strikethrough. A dismissed item ("Trifft auf
-// mich nicht zu") takes priority over both: it collapses in place into one
-// compact muted row with "Rückgängig" to restore it, no timer.
+// muted checkbox+title row (plus the KI badge for practice/note items, no
+// quote), no strikethrough. A dismissed item ("Trifft auf mich nicht zu")
+// takes priority over both: it collapses in place into one compact muted row
+// with "Rückgängig" to restore it, no timer — open.filter() already keeps it
+// out of the open bucket, and the caller places dismissed items at the end
+// of the group, below "Erledigt".
 function renderItemCard(item, compact) {
   const st = state.itemState[item.id] || { ticked: false, hidden: false };
+  const kind = itemKind(item);
+  const isAi = kind === "practice-high" || kind === "practice-low" || kind === "note" || kind === "note-low";
   if (st.hidden) {
     return `
     <div class="item-card dismissed" data-item-id="${item.id}">
@@ -900,18 +928,17 @@ function renderItemCard(item, compact) {
     return `
     <div class="item-card done-compact" data-item-id="${item.id}">
       <button class="item-checkbox checked" role="checkbox" aria-checked="true" aria-label="${esc(item.title)}" data-action="toggle-tick" data-id="${item.id}"></button>
+      ${isAi ? `<span class="ki-badge-inline" aria-label="${esc(t("kiBadgeAriaLabel"))}">${esc(t("kiBadge"))}</span>` : ""}
       <span class="item-title-compact">${esc(item.title)}</span>
     </div>`;
   }
-
-  const kind = itemKind(item);
-  const isAi = kind === "practice-high" || kind === "practice-low" || kind === "note";
 
   let sourceLine = "";
   if (kind === "default") sourceLine = `<div class="item-source">${esc(t("defaultLabel"))}</div>`;
   if (kind === "practice-high") sourceLine = `<div class="item-source"><span class="ki-badge-inline" aria-label="${esc(t("kiBadgeAriaLabel"))}">${esc(t("kiBadge"))}</span>${esc(t("fromPractice", state.ctx.practice_name))}</div>`;
   if (kind === "practice-low") sourceLine = `<div class="item-source"><span class="ki-badge-inline" aria-label="${esc(t("kiBadgeAriaLabel"))}">${esc(t("kiBadge"))}</span>${esc(t("fromPractice", state.ctx.practice_name))}<span class="chip hedge">${esc(t("hedge"))}</span></div>`;
   if (kind === "note") sourceLine = `<div class="item-source"><span class="ki-badge-inline" aria-label="${esc(t("kiBadgeAriaLabel"))}">${esc(t("kiBadge"))}</span>${esc(t("fromNote"))}</div>`;
+  if (kind === "note-low") sourceLine = `<div class="item-source"><span class="ki-badge-inline" aria-label="${esc(t("kiBadgeAriaLabel"))}">${esc(t("kiBadge"))}</span>${esc(t("fromNote"))}<span class="chip hedge">${esc(t("hedge"))}</span></div>`;
   if (kind === "unclear") sourceLine = `<div class="item-source">${esc(t("unclearNote"))}<span class="chip hedge">${esc(t("hedge"))}</span></div>`;
 
   let quote = "";
@@ -1164,6 +1191,8 @@ function renderWhySheet() {
     const when = labelForDays(defaultDays);
     if (kind === "unclear") {
       body += `<p class="body-text">${esc(t("whyReminderUnclear", when))}</p>`;
+    } else if (kind === "note-low") {
+      body += `<p class="body-text">${esc(t("whyMedicationPauseUnclear"))}</p>`;
     } else {
       body += item.due_before
         ? `<p class="body-text">${esc(t("whyReminderFromSource", when))}</p>`
