@@ -180,6 +180,10 @@ const COPY = {
     de: "Eine KI hat diesen Punkt in Ihrer Vorbereitungsnotiz gefunden. Er stammt aus dieser Notiz:",
     en: "An AI found this item in your preparation note. It comes from this note:"
   },
+  whyNoteUnclear: {
+    de: "Ihre Notiz war nicht eindeutig.",
+    en: "Your note wasn't clear."
+  },
   whyNoteFootnote: {
     de: "Die Notiz wird nach dem Termin gelöscht.",
     en: "The note will be deleted after the appointment."
@@ -210,9 +214,9 @@ const COPY = {
   feedbackReason_wrong_timing: { de: "Der Zeitpunkt stimmt nicht", en: "The timing is wrong" },
   feedbackReason_something_else: { de: "Etwas anderes", en: "Something else" },
   send: { de: "Senden", en: "Send" },
-  feedbackMarkedUnsure: {
-    de: "Danke. Der Punkt ist jetzt als unsicher markiert. Bitte klären Sie ihn mit Ihrer Praxis.",
-    en: "Thanks. The item is now marked as uncertain. Please check it with your practice."
+  feedbackCheckWithPractice: {
+    de: "Danke. Bitte klären Sie den Punkt mit Ihrer Praxis.",
+    en: "Thanks. Please check this item with your practice."
   },
   editNoteLink: { de: "Notiz bearbeiten", en: "Edit note" },
 
@@ -991,6 +995,7 @@ function renderItemCard(item, compact) {
   const st = state.itemState[item.id] || { ticked: false, hidden: false };
   const kind = itemKind(item);
   const isAi = kind === "practice-high" || kind === "practice-low" || kind === "note" || kind === "note-low";
+  const isLowConfidence = kind === "practice-low" || kind === "note-low" || kind === "unclear";
   if (st.hidden) {
     return `
     <div class="item-card dismissed" data-item-id="${item.id}">
@@ -1009,10 +1014,10 @@ function renderItemCard(item, compact) {
   let sourceLine = "";
   if (kind === "default") sourceLine = `<div class="item-source">${esc(t("defaultLabel"))}</div>`;
   if (kind === "practice-high") sourceLine = `<div class="item-source"><span class="ki-badge-inline" aria-label="${esc(t("kiBadgeAriaLabel"))}">${esc(t("kiBadge"))}</span>${esc(t("fromPractice", state.ctx.practice_name))}</div>`;
-  if (kind === "practice-low") sourceLine = `<div class="item-source"><span class="ki-badge-inline" aria-label="${esc(t("kiBadgeAriaLabel"))}">${esc(t("kiBadge"))}</span>${esc(t("fromPractice", state.ctx.practice_name))}<span class="chip hedge">${esc(t("hedge"))}</span></div>`;
+  if (kind === "practice-low") sourceLine = `<div class="item-source"><span class="ki-badge-inline" aria-label="${esc(t("kiBadgeAriaLabel"))}">${esc(t("kiBadge"))}</span>${esc(t("fromPractice", state.ctx.practice_name))}</div>`;
   if (kind === "note") sourceLine = `<div class="item-source"><span class="ki-badge-inline" aria-label="${esc(t("kiBadgeAriaLabel"))}">${esc(t("kiBadge"))}</span>${esc(t("fromNote"))}</div>`;
-  if (kind === "note-low") sourceLine = `<div class="item-source"><span class="ki-badge-inline" aria-label="${esc(t("kiBadgeAriaLabel"))}">${esc(t("kiBadge"))}</span>${esc(t("fromNote"))}<span class="chip hedge">${esc(t("hedge"))}</span></div>`;
-  if (kind === "unclear") sourceLine = `<div class="item-source">${esc(t("unclearNote"))}<span class="chip hedge">${esc(t("hedge"))}</span></div>`;
+  if (kind === "note-low") sourceLine = `<div class="item-source"><span class="ki-badge-inline" aria-label="${esc(t("kiBadgeAriaLabel"))}">${esc(t("kiBadge"))}</span>${esc(t("fromNote"))}</div>`;
+  if (kind === "unclear") sourceLine = `<div class="item-source">${esc(t("unclearNote"))}</div>`;
 
   let quote = "";
   if (isAi) {
@@ -1020,8 +1025,21 @@ function renderItemCard(item, compact) {
       <button class="quote-toggle" data-action="toggle-quote" data-id="${item.id}">${esc(t("showMore"))}</button>`;
   }
 
+  // Low-confidence items (AI uncertainty only, not a user report) get an
+  // edge-to-edge status strip instead of the old hedge pill on the source
+  // line, plus a warm-toned card outline (.low-confidence). Tapping the
+  // strip opens the same "Warum sehe ich das?" sheet as the footer link.
+  const statusStrip = isLowConfidence
+    ? `<button class="status-strip" data-action="why-item" data-id="${item.id}" data-kind="${kind}">
+        <svg class="warning-icon" viewBox="0 0 24 24" fill="none" width="16" height="16" aria-hidden="true"><path d="M12 4 2.5 20h19L12 4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 10v4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="17.3" r="1" fill="currentColor"/></svg>
+        <span>${esc(t("hedge"))}</span>
+        <svg class="info-icon" viewBox="0 0 24 24" fill="none" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="9.2" stroke="currentColor" stroke-width="1.6"/><path d="M12 11v5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="7.8" r="1" fill="currentColor"/></svg>
+      </button>`
+    : "";
+
   return `
-  <div class="item-card" data-item-id="${item.id}">
+  <div class="item-card${isLowConfidence ? " low-confidence" : ""}" data-item-id="${item.id}">
+    ${statusStrip}
     <div class="item-top">
       <button class="item-checkbox${st.ticked ? " checked" : ""}" role="checkbox" aria-checked="${st.ticked}" aria-label="${esc(item.title)}" data-action="toggle-tick" data-id="${item.id}"></button>
       <div class="item-main">
@@ -1255,8 +1273,10 @@ function renderWhySheet() {
   } else if (kind === "practice-high" || kind === "practice-low") {
     body = `<p class="body-text">${esc(t("whyPracticeIntro", state.ctx.practice_name, state.ctx.appointment_type))}</p><p class="quote-line" style="-webkit-line-clamp:unset;">${quoteWrap(esc(item.source_quote))}</p>`;
     if (kind === "practice-low") body += `<p class="body-text">${esc(t("whyPracticeLowNote"))}</p>`;
+  } else if (kind === "unclear") {
+    body = `<p class="body-text">${esc(t("whyNoteUnclear"))}</p>`;
   } else {
-    // note and unclear both reuse the note explanation
+    // note and note-low reuse the note explanation
     body = `<p class="body-text">${esc(t("whyNoteIntro"))}</p><p class="quote-line" style="-webkit-line-clamp:unset;">${quoteWrap(esc(item.source_quote))}</p><p class="body-text">${esc(t("whyNoteFootnote"))}</p>`;
   }
   const defaultDays = reminderDueDays(item);
@@ -1279,27 +1299,32 @@ function renderWhySheet() {
       <div class="sheet-title-row"><h2 id="why-title">${esc(t("whySeeThis"))}</h2></div>
       ${body}
       ${renderFeedbackBlock(kind, item)}
-      <div class="sheet-actions"><button class="btn-secondary" data-action="close-sheet">${esc(t("close"))}</button></div>
+      <div class="sheet-actions"><button class="btn-primary" data-action="close-sheet">${esc(t("close"))}</button></div>
     </div>
   </div>`;
 }
 
 // Quiet feedback block at the bottom of "Warum sehe ich das?" — never shown
-// for default items. Practice items get a 3-reason single-select followed by
-// "Senden," which marks the live item object's band "low" directly (the
-// same reference held in state.payload.results, so the hedge and the
-// dynamically-derived mixed-confidence framing both update immediately).
-// Note, note-low and unclear items get "Notiz bearbeiten" instead, opening
-// the note composer. No free text anywhere.
+// for default items. Practice items (high and low confidence) get Ja/Nein,
+// then on "Nein" a 3-reason single-select and "Senden"; sending only shows a
+// thank-you, it never changes the item itself or this sheet's own text.
+// "note" (high confidence) gets Ja/Nein, then "Notiz bearbeiten" on "Nein".
+// note-low and unclear skip the question entirely and go straight to
+// "Notiz bearbeiten". No free text anywhere.
 function renderFeedbackBlock(kind, item) {
   if (kind === "default") return "";
+  if (kind === "unclear" || kind === "note-low") {
+    return `<div class="why-feedback">
+      <button class="feedback-link" data-action="edit-note-from-why">${esc(t("editNoteLink"))}</button>
+    </div>`;
+  }
   const isPractice = kind === "practice-high" || kind === "practice-low";
   const feedback = state.itemFeedback.get(item.id);
   if (feedback === "yes") {
     return `<div class="why-feedback"><p class="feedback-confirm">${esc(t("feedbackThanks"))}</p></div>`;
   }
   if (feedback === "sent") {
-    return `<div class="why-feedback"><p class="feedback-confirm">${esc(t("feedbackMarkedUnsure"))}</p></div>`;
+    return `<div class="why-feedback"><p class="feedback-confirm">${esc(t("feedbackCheckWithPractice"))}</p></div>`;
   }
   const question = isPractice ? t("feedbackQuestionPractice") : t("feedbackQuestionNote");
   if (state.whyFeedbackStep === "followup") {
@@ -1431,8 +1456,7 @@ function onRootClick(e) {
       break;
     case "send-feedback": {
       state.itemFeedback.set(state.why.item.id, "sent");
-      state.why.item.band = "low"; // same object reference as in payload.results
-      state.liveMessage = t("feedbackMarkedUnsure");
+      state.liveMessage = t("feedbackCheckWithPractice");
       render();
       break;
     }

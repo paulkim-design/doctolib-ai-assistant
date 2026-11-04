@@ -18,6 +18,16 @@
   --info-border: #a8eaff;
   --info-ink: #004f78;
 
+  /* Warning/amber tokens added for this prototype only — not part of the
+     measured Doctolib design system, which has no warning tokens. Extended
+     from the existing hedge-chip amber (#fff4e0/#7a4b00/#f0d9ab), darkened
+     so --warning-ink reaches 4.5:1+ on --warning-bg (8.4:1) and
+     --warning-border reaches 3:1+ against both white and --surface-page
+     (4.84:1 / 4.48:1). No red. */
+  --warning-bg: #fff4e0;
+  --warning-border: #946a1c;
+  --warning-ink: #6b3d00;
+
   --font-display: "Montserrat", system-ui, sans-serif;
   --font-text: "Roboto", system-ui, sans-serif;
 
@@ -322,6 +332,34 @@ button {
   position: relative;
 }
 
+/* AI-uncertainty items only (practice-low, note-low, unclear): outline in
+   the warm warning tone, topped by the edge-to-edge status strip below. */
+.item-card.low-confidence {
+  border-color: var(--warning-border);
+  overflow: hidden;
+}
+
+/* Edge-to-edge like .item-actions below, but at the top of the card.
+   Tappable — opens "Warum sehe ich das?". No reason text here; that lives
+   in the sheet. Replaces the old hedge pill on the source line. */
+.status-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -12px -12px 10px;
+  padding: 7px 12px;
+  background: var(--warning-bg);
+  border: none;
+  border-bottom: var(--border-hairline) solid var(--warning-border);
+  border-radius: 7px 7px 0 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--warning-ink);
+  text-align: left;
+}
+.status-strip .warning-icon { flex-shrink: 0; }
+.status-strip .info-icon { margin-left: auto; flex-shrink: 0; }
+
 .item-top { display: flex; gap: 10px; align-items: flex-start; }
 .item-checkbox {
   width: 22px; height: 22px;
@@ -383,11 +421,6 @@ button {
   background: var(--surface-page);
   color: var(--text-muted);
   border: var(--border-hairline) solid var(--rule-strong);
-}
-.chip.hedge {
-  background: #fff4e0;
-  color: #7a4b00;
-  border-color: #f0d9ab;
 }
 
 .quote-line {
@@ -645,17 +678,6 @@ button {
   text-align: center;
 }
 .btn-primary:disabled { background: var(--divider); color: var(--text-subtle); cursor: not-allowed; }
-.btn-secondary {
-  width: 100%;
-  background: var(--white);
-  border: var(--border-hairline) solid var(--rule-strong);
-  color: var(--slate-700);
-  border-radius: var(--radius-button);
-  padding: 13px;
-  font-size: 14.5px;
-  font-weight: 600;
-  text-align: center;
-}
 .btn-text {
   width: 100%;
   text-align: center;
