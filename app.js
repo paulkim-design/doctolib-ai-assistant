@@ -201,6 +201,21 @@ const COPY = {
     en: "Your note doesn't name a time. Please check with your practice when to pause the medication."
   },
 
+  feedbackQuestionPractice: { de: "Passt dieser Punkt zum Text oben?", en: "Does this item match the text above?" },
+  feedbackQuestionNote: { de: "Passt dieser Punkt zu Ihrer Notiz?", en: "Does this item match your note?" },
+  yes: { de: "Ja", en: "Yes" },
+  no: { de: "Nein", en: "No" },
+  feedbackThanks: { de: "Danke für Ihre Rückmeldung.", en: "Thanks for your feedback." },
+  feedbackReason_not_in_text: { de: "Der Punkt steht so nicht im Text", en: "The item isn't in the text like this" },
+  feedbackReason_wrong_timing: { de: "Der Zeitpunkt stimmt nicht", en: "The timing is wrong" },
+  feedbackReason_something_else: { de: "Etwas anderes", en: "Something else" },
+  send: { de: "Senden", en: "Send" },
+  feedbackMarkedUnsure: {
+    de: "Danke. Der Punkt ist jetzt als unsicher markiert. Bitte klären Sie ihn mit Ihrer Praxis.",
+    en: "Thanks. The item is now marked as uncertain. Please check it with your practice."
+  },
+  editNoteLink: { de: "Notiz bearbeiten", en: "Edit note" },
+
   deleteNoteTitle: { de: "Notiz löschen?", en: "Delete note?" },
   deleteNoteBody: {
     de: "Punkte aus dieser Notiz und ihre Erinnerungen werden aus Ihrer Checkliste entfernt.",
@@ -442,6 +457,9 @@ function freshState() {
     noteComposer: { mode: "add", editingId: null, text: "", error: "" },
     deleteTarget: null,
     why: null, // { kind, item }
+    itemFeedback: new Map(), // id -> "yes" | "sent" (persists across sheet opens)
+    whyFeedbackStep: "initial", // initial | followup — reset each time the why-sheet opens
+    whyFeedbackReason: null, // selected reason key in the practice-item followup
     reminderDraft: [], // general-reminder sheet's in-progress selection
     itemReminderTarget: null, // per-item reminder sheet's target item id
     itemReminderDraft: null, // per-item reminder sheet's in-progress choice key
@@ -1254,7 +1272,58 @@ function renderWhySheet() {
       <div class="sheet-handle"></div>
       <div class="sheet-title-row"><h2 id="why-title">${esc(t("whySeeThis"))}</h2></div>
       ${body}
+      ${renderFeedbackBlock(kind, item)}
       <div class="sheet-actions"><button class="btn-primary" data-action="close-sheet">${esc(t("close"))}</button></div>
+    </div>
+  </div>`;
+}
+
+// Quiet feedback block at the bottom of "Warum sehe ich das?" — never shown
+// for default items. Practice items get a 3-reason single-select followed by
+// "Senden," which marks the live item object's band "low" directly (the
+// same reference held in state.payload.results, so the hedge and the
+// dynamically-derived mixed-confidence framing both update immediately).
+// Note, note-low and unclear items get "Notiz bearbeiten" instead, opening
+// the note composer. No free text anywhere.
+function renderFeedbackBlock(kind, item) {
+  if (kind === "default") return "";
+  const isPractice = kind === "practice-high" || kind === "practice-low";
+  const feedback = state.itemFeedback.get(item.id);
+  if (feedback === "yes") {
+    return `<div class="why-feedback"><p class="feedback-confirm">${esc(t("feedbackThanks"))}</p></div>`;
+  }
+  if (feedback === "sent") {
+    return `<div class="why-feedback"><p class="feedback-confirm">${esc(t("feedbackMarkedUnsure"))}</p></div>`;
+  }
+  const question = isPractice ? t("feedbackQuestionPractice") : t("feedbackQuestionNote");
+  if (state.whyFeedbackStep === "followup") {
+    if (isPractice) {
+      const reasons = ["not_in_text", "wrong_timing", "something_else"];
+      return `<div class="why-feedback">
+        <p class="feedback-question">${esc(question)}</p>
+        <div class="feedback-reasons" role="radiogroup" aria-label="${esc(question)}">
+          ${reasons
+            .map(
+              (r) => `<label class="feedback-reason">
+            <input type="radio" name="feedback-reason" data-action="select-feedback-reason" data-reason="${r}" ${state.whyFeedbackReason === r ? "checked" : ""} />
+            <span>${esc(t("feedbackReason_" + r))}</span>
+          </label>`
+            )
+            .join("")}
+        </div>
+        <button class="feedback-link" data-action="send-feedback" ${state.whyFeedbackReason ? "" : "disabled"}>${esc(t("send"))}</button>
+      </div>`;
+    }
+    return `<div class="why-feedback">
+      <p class="feedback-question">${esc(question)}</p>
+      <button class="feedback-link" data-action="edit-note-from-why">${esc(t("editNoteLink"))}</button>
+    </div>`;
+  }
+  return `<div class="why-feedback">
+    <p class="feedback-question">${esc(question)}</p>
+    <div class="feedback-actions">
+      <button class="feedback-link" data-action="feedback-yes" data-id="${item.id}">${esc(t("yes"))}</button>
+      <button class="feedback-link" data-action="feedback-no">${esc(t("no"))}</button>
     </div>
   </div>`;
 }
@@ -1336,7 +1405,35 @@ function onRootClick(e) {
       const id = el.dataset.id;
       const kind = el.dataset.kind;
       const item = findItem(id);
-      openSheet("why", { why: { kind, item } });
+      openSheet("why", { why: { kind, item }, whyFeedbackStep: "initial", whyFeedbackReason: null });
+      break;
+    }
+    case "feedback-yes": {
+      const id = el.dataset.id;
+      state.itemFeedback.set(id, "yes");
+      state.liveMessage = t("feedbackThanks");
+      render();
+      break;
+    }
+    case "feedback-no":
+      state.whyFeedbackStep = "followup";
+      render();
+      break;
+    case "select-feedback-reason":
+      state.whyFeedbackReason = el.dataset.reason;
+      render();
+      break;
+    case "send-feedback": {
+      state.itemFeedback.set(state.why.item.id, "sent");
+      state.why.item.band = "low"; // same object reference as in payload.results
+      state.liveMessage = t("feedbackMarkedUnsure");
+      render();
+      break;
+    }
+    case "edit-note-from-why": {
+      const item = state.why.item;
+      const note = state.ctx.patient_notes.find((n) => n.text === item.source_quote);
+      if (note) openSheet("notecomposer", { noteComposer: { mode: "edit", editingId: note.id, text: note.text, error: "" } });
       break;
     }
     case "toggle-quote": {
