@@ -74,7 +74,7 @@ const COPY = {
   defaultLabel: { de: "Für diese Terminart meist nötig", en: "Usually needed for this appointment type" },
   fromPractice: { de: (name) => `Von ${name}`, en: (name) => `From ${name}` },
   fromNote: { de: "Aus Ihrer Notiz", en: "From your note" },
-  unclearNote: { de: "Von Ihnen notiert (unklar)", en: "Noted by you (unclear)" },
+  unclearNote: { de: "Von Ihnen notiert", en: "Noted by you" },
   hedge: { de: "Bitte prüfen", en: "Please check" },
   showMore: { de: "Mehr anzeigen", en: "Show more" },
   showLess: { de: "Weniger anzeigen", en: "Show less" },
@@ -154,6 +154,10 @@ const COPY = {
     de: "Notieren Sie, was Ihre Praxis Ihnen zur Vorbereitung gesagt hat, zum Beispiel beim letzten Termin.",
     en: "Note down what your practice told you about preparation, for example at your last appointment."
   },
+  noteComposerDismissHint: {
+    de: "Brauchen Sie einen Punkt nicht? Tippen Sie bei dem Punkt auf „Trifft auf mich nicht zu“.",
+    en: "Don't need an item? Tap “Doesn't apply to me” on that item."
+  },
   noteFieldLabel: { de: "Ihre Notiz", en: "Your note" },
   examplesLabel: { de: "Vorschläge", en: "Suggestions" },
   noteHelperText: {
@@ -181,8 +185,8 @@ const COPY = {
     en: "An AI found this item in your preparation note. It comes from this note:"
   },
   whyNoteUnclear: {
-    de: "Ihre Notiz war nicht eindeutig.",
-    en: "Your note wasn't clear."
+    de: "Wir konnten daraus keinen eigenen Punkt machen. Ihre Notiz steht hier so, wie Sie sie geschrieben haben.",
+    en: "We couldn't turn this into a separate item. Your note is shown as you wrote it."
   },
   whyNoteFootnote: {
     de: "Die Notiz wird nach dem Termin gelöscht.",
@@ -271,9 +275,10 @@ function computeFraming() {
   if (p.state === "error") return FRAMING.error.any[LANG];
   // high_confidence/mixed_confidence/low_confidence are derived from the
   // bands actually present in results, not trusted as a static fixture
-  // field — an unclear note (band "low") added next to a high practice item
-  // must read as mixed, never silently stay "high_confidence".
-  const bands = p.results.map((r) => r.band);
+  // field. Unclear notes are excluded: the system couldn't turn them into
+  // an item at all, so they're not something to "check," and must never
+  // trigger the mixed/low-confidence "Bitte prüfen" framing by themselves.
+  const bands = p.results.filter((r) => r.action !== "unclear").map((r) => r.band);
   const hasHigh = bands.includes("high");
   const hasLow = bands.includes("low");
   const effectiveState = hasHigh && hasLow ? "mixed_confidence" : hasLow ? "low_confidence" : "high_confidence";
@@ -995,7 +1000,10 @@ function renderItemCard(item, compact) {
   const st = state.itemState[item.id] || { ticked: false, hidden: false };
   const kind = itemKind(item);
   const isAi = kind === "practice-high" || kind === "practice-low" || kind === "note" || kind === "note-low";
-  const isLowConfidence = kind === "practice-low" || kind === "note-low" || kind === "unclear";
+  // Unclear notes aren't "low confidence" to check — they're notes the
+  // system couldn't turn into an item at all, shown as typed. No strip, no
+  // warm outline, just a normal card.
+  const isLowConfidence = kind === "practice-low" || kind === "note-low";
   if (st.hidden) {
     return `
     <div class="item-card dismissed" data-item-id="${item.id}">
@@ -1050,7 +1058,11 @@ function renderItemCard(item, compact) {
       </div>
     </div>
     <div class="item-actions">
-      <button data-action="dismiss-item" data-id="${item.id}">${esc(t("dismissItem"))}</button>
+      ${
+        kind === "note" || kind === "note-low" || kind === "unclear"
+          ? `<button data-action="edit-note-for-item" data-id="${item.id}">${esc(t("editNoteLink"))}</button>`
+          : `<button data-action="dismiss-item" data-id="${item.id}">${esc(t("dismissItem"))}</button>`
+      }
       <button data-action="why-item" data-id="${item.id}" data-kind="${kind}">${esc(t("whySeeThis"))}</button>
     </div>
   </div>`;
@@ -1180,6 +1192,7 @@ function renderNoteComposerSheet() {
         <button class="sheet-close" data-action="close-sheet" aria-label="${esc(t("close"))}">✕</button>
       </div>
       <p class="intro">${esc(t("noteComposerIntro"))}</p>
+      <p class="intro">${esc(t("noteComposerDismissHint"))}</p>
       <div class="field-label-row">
         <label for="note-field">${esc(t("noteFieldLabel"))}</label>
         <span class="counter">${nc.text.length}/160</span>
@@ -1463,6 +1476,12 @@ function onRootClick(e) {
     case "edit-note-from-why": {
       const item = state.why.item;
       const note = state.ctx.patient_notes.find((n) => n.text === item.source_quote);
+      if (note) openSheet("notecomposer", { noteComposer: { mode: "edit", editingId: note.id, text: note.text, error: "" } });
+      break;
+    }
+    case "edit-note-for-item": {
+      const item = findItem(el.dataset.id);
+      const note = item && state.ctx.patient_notes.find((n) => n.text === item.source_quote);
       if (note) openSheet("notecomposer", { noteComposer: { mode: "edit", editingId: note.id, text: note.text, error: "" } });
       break;
     }

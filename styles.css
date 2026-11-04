@@ -332,8 +332,10 @@ button {
   position: relative;
 }
 
-/* AI-uncertainty items only (practice-low, note-low, unclear): outline in
-   the warm warning tone, topped by the edge-to-edge status strip below. */
+/* Unclear practice sentences and medication pauses without a time only:
+   outline in the warm warning tone, topped by the edge-to-edge status strip
+   below. Unclear notes (couldn't be turned into an item at all) stay a
+   normal card — see itemKind/isLowConfidence in app.js. */
 .item-card.low-confidence {
   border-color: var(--warning-border);
   overflow: hidden;
@@ -346,6 +348,7 @@ button {
   display: flex;
   align-items: center;
   gap: 6px;
+  width: calc(100% + 24px);
   margin: -12px -12px 10px;
   padding: 7px 12px;
   background: var(--warning-bg);
