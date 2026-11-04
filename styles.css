@@ -229,7 +229,6 @@ button {
 .action-card .icon { width: 24px; height: 24px; flex-shrink: 0; color: var(--blue-interactive); }
 .action-card .label { flex: 1; min-width: 0; font-size: 14px; font-weight: 500; color: var(--blue-interactive); }
 .action-card .chevron { color: var(--text-subtle); font-size: 18px; }
-button.action-card:hover { background: var(--surface-page); }
 
 /* ---------- Checklist screen ---------- */
 
@@ -368,6 +367,13 @@ button.action-card:hover { background: var(--surface-page); }
   border-radius: var(--radius-pill);
   flex-shrink: 0;
 }
+/* Done rows: same muted grey as the done title, no fill — not the brand-blue
+   badge used on open cards. */
+.ki-badge-inline.muted {
+  background: transparent;
+  color: var(--text-subtle);
+  border: 1px solid var(--text-subtle);
+}
 .chip {
   display: inline-block;
   font-size: 11px;
@@ -497,6 +503,38 @@ button.action-card:hover { background: var(--surface-page); }
 .info-card .disclaimer { font-size: 11.5px; color: var(--text-subtle); margin-top: 6px; }
 /* Neutral styling, per brief: never alarm/red tones, same card as the
    contact card. */
+
+/* Borderless variant for the appointment page's "as today" cards (Patient,
+   facility details), matching the screenshot's flat white-on-pale look. */
+.info-card.flat { border: none; }
+
+.patient-row { display: flex; align-items: center; gap: 12px; margin: 8px 0 4px; }
+.patient-icon {
+  width: 36px; height: 36px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-page);
+  color: var(--slate-700);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.patient-name { font-size: 14px; font-weight: 700; color: var(--ink-black); }
+.patient-status { font-size: 12.5px; color: var(--slate-700); margin-top: 2px; }
+
+.info-card-divider { border-top: var(--border-hairline) solid var(--divider); margin: 10px 0; }
+
+.info-card-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--blue-interactive);
+  padding: 4px 0;
+}
+.info-card-row .chevron { font-size: 16px; }
+
+.info-subheading { font-size: 12px; font-weight: 700; color: var(--slate-700); margin: 6px 0 2px; }
+.practice-name-line { font-weight: 700; color: var(--ink-black); }
 
 .retry-btn {
   margin: 6px var(--space-16) 0;
@@ -732,6 +770,7 @@ textarea.field:focus { border-color: var(--blue-interactive); }
 .item-reminder-line .chevron { font-size: 14px; }
 
 .reminder-options { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 14px; }
+.reminder-divider { border-top: var(--border-hairline) solid var(--divider); margin: 6px 0; }
 .reminder-option {
   display: flex;
   align-items: center;

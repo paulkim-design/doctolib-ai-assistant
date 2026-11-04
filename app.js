@@ -45,6 +45,14 @@ const COPY = {
   reschedule: { de: "Verschieben", en: "Reschedule" },
   cancelAppointment: { de: "Termin absagen", en: "Cancel appointment" },
   uploadDocuments: { de: "Dokumente hochladen", en: "Upload documents" },
+  patientCardTitle: { de: "Patient", en: "Patient" },
+  patientStatus: { de: "Gesetzlich versichert", en: "Statutory health insurance" },
+  shareAppointmentDetails: { de: "Termindetails teilen", en: "Share appointment details" },
+  facilityDetailsTitle: { de: "Einzelheiten der Gesundheitseinrichtung", en: "Health facility details" },
+  addressLabel: { de: "Adresse", en: "Address" },
+  openMap: { de: "Karte öffnen", en: "Open map" },
+  billingTypesLabel: { de: "Abrechnungsarten", en: "Billing types" },
+  billingTypesValue: { de: "Gesetzlich und privat Versicherte", en: "Statutory and private patients" },
 
   entryBefore: { de: "Vorbereitung", en: "Preparation" },
   entryAfter: {
@@ -328,38 +336,39 @@ function labelForReminder(r) {
   return r.hours === 1 ? t("reminderOption_hour_before") : labelForDays(r.days);
 }
 
-// The per-item reminder sheet's fixed ladder (1 week / 3 days / 1 day / 1
-// hour before). For an item with an explicit due_before from the source
-// text, options later than that time are excluded — the patient can move the
-// reminder earlier, never later than what the practice or note actually
-// said. A group-default-only item (no source due_before) gets every option,
-// including ones later than its own default. "Andere …" (a day-only
-// stepper) and "Keine Erinnerung" are always offered. Returns null if the
-// item has no due time at all (nothing to pick a reminder for).
+// The per-item reminder sheet's fixed ladder, always in the same time order
+// (1 week / 3 days / 1 day / 1 hour before) — there's no separate "default"
+// entry; whichever of these already matches the item's own default is just
+// pre-selected (see ladderKeyForDays). For an item with an explicit
+// due_before from the source text, options later than that time are
+// excluded — the patient can move the reminder earlier, never later than
+// what the practice or note actually said. A group-default-only item (no
+// source due_before) gets every option, including ones later than its own
+// default. Returns null if the item has no due time at all (nothing to pick
+// a reminder for).
 function itemReminderOptions(item) {
-  const defaultDays = reminderDueDays(item);
-  if (defaultDays === null) return null;
-  const defaultLabel = labelForDays(defaultDays);
+  if (reminderDueDays(item) === null) return null;
   const sourceHours = sourceDueHours(item);
-
   const LADDER = [
-    { key: "week", hours: 168, label: t("reminderOption_week_before") },
-    { key: "three_days", hours: 72, label: t("whenNDaysBefore", 3) },
-    { key: "one_day", hours: 24, label: t("whenOneDayBefore") },
-    { key: "one_hour", hours: 1, label: t("reminderOption_hour_before") }
+    { key: "week", label: t("reminderOption_week_before"), hours: 168 },
+    { key: "three_days", label: t("whenNDaysBefore", 3), hours: 72 },
+    { key: "one_day", label: t("whenOneDayBefore"), hours: 24 },
+    { key: "one_hour", label: t("reminderOption_hour_before"), hours: 1 }
   ];
+  return LADDER.filter((o) => sourceHours === null || o.hours >= sourceHours);
+}
 
-  // Compared by label, not raw hours: the appointment_day default (0 days)
-  // now reads "1 Stunde vorher" too, so it must suppress the ladder's own
-  // "one_hour" entry to avoid showing the same choice twice.
-  const ladderOptions = LADDER.filter((o) => o.label !== defaultLabel).filter((o) => sourceHours === null || o.hours >= sourceHours);
-
-  return [
-    { key: "default", label: defaultLabel },
-    ...ladderOptions.map((o) => ({ key: o.key, label: o.label })),
-    { key: "other", label: t("otherReminderOption") },
-    { key: "none", label: t("noReminderOption") }
-  ];
+// Which ladder key (if any) a plain day count corresponds to — 0 maps to
+// "one_hour" since the appointment_day default is itself labelled "1 Stunde
+// vorher" (the bundled push fires 1 hour before). A non-standard count (e.g.
+// a note's own "2 Tage") matches none of these, so the sheet opens on
+// "Andere …" pre-filled with that value instead.
+function ladderKeyForDays(days) {
+  if (days === 7) return "week";
+  if (days === 3) return "three_days";
+  if (days === 1) return "one_day";
+  if (days === 0) return "one_hour";
+  return null;
 }
 
 // The minimum day count the "Andere …" stepper allows: never later than an
@@ -772,7 +781,7 @@ function renderAppointment() {
     </div>
     <div class="action-card-list">
       <div class="action-card" aria-disabled="true">
-        <svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v11m0 0 4-4m-4 4-4-4M5 16v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 2h8l4 4v16H6V2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 2v4h4" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 18v-6m-2.5 2.5L12 12l2.5 2.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <span class="label">${esc(t("uploadDocuments"))}</span>
         <span class="chevron">›</span>
       </div>
@@ -781,8 +790,39 @@ function renderAppointment() {
         <span class="label">${esc(label)}</span>
         <span class="chevron">›</span>
       </button>
+      <div class="info-card flat">
+        <h4>${esc(t("patientCardTitle"))}</h4>
+        <div class="patient-row">
+          <span class="patient-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" width="20" height="20"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.6"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
+          <div>
+            <div class="patient-name">Tessa Beispiel</div>
+            <div class="patient-status">${esc(t("patientStatus"))}</div>
+          </div>
+        </div>
+        <div class="info-card-divider"></div>
+        <span class="info-card-row">${esc(t("shareAppointmentDetails"))} <span class="chevron">›</span></span>
+      </div>
+      <div class="info-card flat">
+        <h4>${esc(t("facilityDetailsTitle"))}</h4>
+        <div class="info-subheading">${esc(t("addressLabel"))}</div>
+        <p class="practice-name-line">${esc(state.ctx.practice_name)}</p>
+        <p>${esc(mockFacilityAddress().street)}</p>
+        <p>${esc(mockFacilityAddress().city)}</p>
+        <span class="info-card-row">${esc(t("openMap"))}</span>
+        <div class="info-card-divider"></div>
+        <div class="info-subheading">${esc(t("billingTypesLabel"))}</div>
+        <p>${esc(t("billingTypesValue"))}</p>
+      </div>
     </div>
   </div>`;
+}
+
+// Mock address lines for the facility-details card — presentational "as
+// today" page content, not part of the Vorbereitung feature's own contact
+// data. Flow 2 uses its own street; the two MRT flows share Flow 1's.
+function mockFacilityAddress() {
+  if (FLOW_ID === "flow2") return { street: "Musterweg 2", city: "12345 Musterstadt" };
+  return { street: "Musterstraße 12", city: "12345 Musterstadt" };
 }
 
 function renderPushScreen() {
@@ -893,10 +933,19 @@ function renderReminderLine() {
   return `<button class="reminder-line" data-action="open-reminder-sheet">${esc(label)}</button>`;
 }
 
+// The three buckets are mutually exclusive — dismissed wins over ticked, so
+// a hidden item never also qualifies as "open" (it was appearing twice,
+// once where it naturally sorted and once at the end).
 function renderGroupSection(groupId, items) {
   if (items.length === 0) return "";
-  const open = items.filter((it) => !(state.itemState[it.id] && state.itemState[it.id].ticked));
-  const done = items.filter((it) => state.itemState[it.id] && state.itemState[it.id].ticked);
+  const open = items.filter((it) => {
+    const st = state.itemState[it.id];
+    return !(st && (st.ticked || st.hidden));
+  });
+  const done = items.filter((it) => {
+    const st = state.itemState[it.id];
+    return st && st.ticked && !st.hidden;
+  });
   const dismissed = items.filter((it) => state.itemState[it.id] && state.itemState[it.id].hidden);
   return `
   <div class="group-section">
@@ -928,7 +977,7 @@ function renderItemCard(item, compact) {
     return `
     <div class="item-card done-compact" data-item-id="${item.id}">
       <button class="item-checkbox checked" role="checkbox" aria-checked="true" aria-label="${esc(item.title)}" data-action="toggle-tick" data-id="${item.id}"></button>
-      ${isAi ? `<span class="ki-badge-inline" aria-label="${esc(t("kiBadgeAriaLabel"))}">${esc(t("kiBadge"))}</span>` : ""}
+      ${isAi ? `<span class="ki-badge-inline muted" aria-label="${esc(t("kiBadgeAriaLabel"))}">${esc(t("kiBadge"))}</span>` : ""}
       <span class="item-title-compact">${esc(item.title)}</span>
     </div>`;
   }
@@ -1137,8 +1186,12 @@ function renderReminderSheet() {
 
 function renderItemReminderSheet() {
   const item = findItem(state.itemReminderTarget);
-  const options = itemReminderOptions(item) || [];
+  const ladder = itemReminderOptions(item) || [];
   const current = state.itemReminderDraft;
+  const radio = (key, label) => `<label class="reminder-option">
+          <input type="radio" name="item-reminder" data-action="select-item-reminder" data-key="${key}" ${current === key ? "checked" : ""} />
+          <span>${esc(label)}</span>
+        </label>`;
   const stepper =
     current === "other"
       ? `<div class="day-stepper">
@@ -1156,15 +1209,11 @@ function renderItemReminderSheet() {
         <button class="sheet-close" data-action="close-sheet" aria-label="${esc(t("close"))}">✕</button>
       </div>
       <div class="reminder-options" role="radiogroup" aria-labelledby="item-reminder-title">
-        ${options
-          .map(
-            (o) => `<label class="reminder-option">
-          <input type="radio" name="item-reminder" data-action="select-item-reminder" data-key="${o.key}" ${current === o.key ? "checked" : ""} />
-          <span>${esc(o.label)}</span>
-        </label>
-        ${o.key === "other" ? stepper : ""}`
-          )
-          .join("")}
+        ${ladder.map((o) => radio(o.key, o.label)).join("")}
+        ${radio("other", t("otherReminderOption"))}
+        ${stepper}
+        <div class="reminder-divider"></div>
+        ${radio("none", t("noReminderOption"))}
       </div>
       <div class="sheet-actions">
         <button class="btn-primary" data-action="save-item-reminder">${esc(t("save"))}</button>
@@ -1327,12 +1376,20 @@ function onRootClick(e) {
       const id = el.dataset.id;
       const item = findItem(id);
       const override = state.reminderOverrides.get(id);
-      let draftKey = "default";
+      let draftKey;
       let otherDays = null;
-      if (override === "none" || override === "week" || override === "three_days" || override === "one_day" || override === "one_hour") draftKey = override;
-      else if (override && typeof override === "object" && override.other != null) {
+      if (override === "none" || override === "week" || override === "three_days" || override === "one_day" || override === "one_hour") {
+        draftKey = override;
+      } else if (override && typeof override === "object" && override.other != null) {
         draftKey = "other";
         otherDays = override.other;
+      } else {
+        // No override: pick the ladder entry matching the item's own
+        // default, or fall to "Andere …" pre-filled with it if it's a
+        // non-standard count (e.g. a note's own "2 Tage").
+        const standardKey = ladderKeyForDays(reminderDueDays(item));
+        draftKey = standardKey || "other";
+        if (!standardKey) otherDays = reminderDueDays(item);
       }
       openSheet("itemreminder", { itemReminderTarget: id, itemReminderDraft: draftKey, itemReminderOtherDays: otherDays || minOtherDays(item) });
       break;
