@@ -92,13 +92,17 @@ const FLOW1_EN = {
 /* ------------------------------- Flow 2 -------------------------------
    "My note becomes items, and I'm reminded" — check-up with blood draw,
    consent already given. Entry: appointment details page. The patient
-   writes the note themselves (only the two universal suggestion chips are
-   shown); simulatedItemForNote() in app.js matches this exact text to
-   reproduce the fixture's two-item split, since there's no live NLP to
-   generalize it — whoever drives the prototype types it verbatim. */
+   writes the note themselves, in their own words, describing the two
+   instructions from the scenario (pause the blood thinner 2 days before,
+   drink enough water). simulatedItemForNote() in app.js matches keywords
+   (case-insensitive, German and English) rather than an exact string, since
+   there's no live NLP: mentioning a concept produces that concept's fixture
+   item, quoted with the patient's own typed text. If neither concept is
+   found, it falls back to the low-confidence "unclear note" item (system
+   prompt §4's uncertainty policy) rather than guessing. */
 
-const FLOW2_NOTE_TEXT_DE = "Blutverdünner 2 Tage vorher pausieren, hat Dr. Musterfrau gesagt. Genügend Wasser trinken.";
-const FLOW2_NOTE_TEXT_EN = "Pause blood thinner 2 days before, Dr. Musterfrau said. Drink enough water.";
+const NOTE_KEYWORDS_MEDICATION = ["verdünn", "medikament", "tablette", "pausier", "absetz", "thinner", "medication", "pause", "stop"];
+const NOTE_KEYWORDS_WATER = ["wasser", "trink", "water", "drink"];
 
 const FLOW2_DE = {
   context: {
@@ -124,11 +128,14 @@ const FLOW2_DE = {
   },
   interfaceState: { ticked: [], reminders_off: [] },
   noteSimRule: {
-    matchText: FLOW2_NOTE_TEXT_DE,
-    items: [
-      { idSuffix: "a", title: "Blutverdünner 2 Tage vorher pausieren", action: "do_or_avoid", group: "before_appointment", due_before: { value: 2, unit: "days" }, band: "high", confidence: 0.84 },
-      { idSuffix: "b", title: "Genügend Wasser trinken", action: "do_or_avoid", group: "appointment_day", due_before: null, band: "high", confidence: 0.81 }
-    ]
+    medication: {
+      keywords: NOTE_KEYWORDS_MEDICATION,
+      item: { title: "Blutverdünner 2 Tage vorher pausieren", action: "do_or_avoid", group: "before_appointment", due_before: { value: 2, unit: "days" }, band: "high", confidence: 0.84 }
+    },
+    water: {
+      keywords: NOTE_KEYWORDS_WATER,
+      item: { title: "Genügend Wasser trinken", action: "do_or_avoid", group: "appointment_day", due_before: null, band: "high", confidence: 0.81 }
+    }
   }
 };
 
@@ -156,11 +163,14 @@ const FLOW2_EN = {
   },
   interfaceState: { ticked: [], reminders_off: [] },
   noteSimRule: {
-    matchText: FLOW2_NOTE_TEXT_EN,
-    items: [
-      { idSuffix: "a", title: "Pause blood thinner 2 days before", action: "do_or_avoid", group: "before_appointment", due_before: { value: 2, unit: "days" }, band: "high", confidence: 0.84 },
-      { idSuffix: "b", title: "Drink enough water", action: "do_or_avoid", group: "appointment_day", due_before: null, band: "high", confidence: 0.81 }
-    ]
+    medication: {
+      keywords: NOTE_KEYWORDS_MEDICATION,
+      item: { title: "Pause blood thinner 2 days before", action: "do_or_avoid", group: "before_appointment", due_before: { value: 2, unit: "days" }, band: "high", confidence: 0.84 }
+    },
+    water: {
+      keywords: NOTE_KEYWORDS_WATER,
+      item: { title: "Drink enough water", action: "do_or_avoid", group: "appointment_day", due_before: null, band: "high", confidence: 0.81 }
+    }
   }
 };
 

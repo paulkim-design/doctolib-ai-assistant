@@ -231,13 +231,21 @@ const FRAMING = {
 
 function computeFraming() {
   const p = state.payload;
-  if (p.state === "low_confidence") return FRAMING.low_confidence.any[LANG];
   if (p.state === "no_result") return FRAMING.no_result.any[LANG];
   if (p.state === "error") return FRAMING.error.any[LANG];
+  // high_confidence/mixed_confidence/low_confidence are derived from the
+  // bands actually present in results, not trusted as a static fixture
+  // field — an unclear note (band "low") added next to a high practice item
+  // must read as mixed, never silently stay "high_confidence".
+  const bands = p.results.map((r) => r.band);
+  const hasHigh = bands.includes("high");
+  const hasLow = bands.includes("low");
+  const effectiveState = hasHigh && hasLow ? "mixed_confidence" : hasLow ? "low_confidence" : "high_confidence";
+  if (effectiveState === "low_confidence") return FRAMING.low_confidence.any[LANG];
   const hasPractice = p.results.some((r) => r.source === "practice");
   const hasPatient = p.results.some((r) => r.source === "patient");
   const key = hasPractice && hasPatient ? "both" : hasPatient ? "patient" : "practice";
-  return FRAMING[p.state][key][LANG];
+  return FRAMING[effectiveState][key][LANG];
 }
 
 /* ---------------------------- Due times & reminders ---------------------------- */
@@ -547,25 +555,36 @@ function enterChecklistFlow() {
 
 // Simulates the AI extraction step for a note: there is no live NLP. The
 // vaccine-booklet example repeats default item d1 in every flow and so
-// produces no item; Flow 2's fixture note is matched verbatim to reproduce
-// its specific two-item split (see fixtures.js's noteSimRule); anything else
-// typed becomes one generic patient item. Always returns an array (possibly
-// empty) of result-shaped objects sharing source_quote = the full note text.
+// produces no item. Flow 2's fixture matches keywords (case-insensitive,
+// German and English) against the patient's own typed text rather than an
+// exact string — mentioning a concept produces that concept's fixture item,
+// quoted with what they actually wrote; mentioning neither falls back to the
+// low-confidence "unclear note" item instead of guessing (system prompt §4).
+// Anything typed in a flow with no noteSimRule becomes one generic item.
+// Always returns an array (possibly empty) of result-shaped objects sharing
+// source_quote = the full note text.
 function simulatedItemForNote(note) {
   if (note.text === NOTE_EXAMPLES.vaccineCard[LANG]) return [];
   const rule = fx().noteSimRule;
-  if (rule && note.text === rule.matchText) {
-    return rule.items.map((it) => ({
-      id: `sim-${note.id}-${it.idSuffix}`,
-      title: it.title,
-      source: "patient",
-      action: it.action,
-      group: it.group,
-      due_before: it.due_before,
-      band: it.band,
-      confidence: it.confidence,
-      source_quote: note.text
-    }));
+  if (rule) {
+    const lower = note.text.toLowerCase();
+    const items = [];
+    if (rule.medication.keywords.some((kw) => lower.includes(kw))) items.push(noteSimItem(note, "a", rule.medication.item));
+    if (rule.water.keywords.some((kw) => lower.includes(kw))) items.push(noteSimItem(note, "b", rule.water.item));
+    if (items.length > 0) return items;
+    return [
+      {
+        id: `sim-${note.id}`,
+        title: note.text,
+        source: "patient",
+        action: "unclear",
+        group: null,
+        due_before: null,
+        band: "low",
+        confidence: 0.2,
+        source_quote: note.text
+      }
+    ];
   }
   return [
     {
@@ -580,6 +599,20 @@ function simulatedItemForNote(note) {
       source_quote: note.text
     }
   ];
+}
+
+function noteSimItem(note, suffix, def) {
+  return {
+    id: `sim-${note.id}-${suffix}`,
+    title: def.title,
+    source: "patient",
+    action: def.action,
+    group: def.group,
+    due_before: def.due_before,
+    band: def.band,
+    confidence: def.confidence,
+    source_quote: note.text
+  };
 }
 
 function removeItemsForNoteText(text) {
@@ -792,8 +825,8 @@ function renderResolvedBody() {
   return `
     ${renderReminderLine()}
     <div class="framing"><h2>${esc(computeFraming())}</h2>${sub}</div>
-    ${groupsHtml}
     ${ungroupedHtml}
+    ${groupsHtml}
     ${renderNotesSection()}
     ${anyVisible ? `<p class="closing-line">${esc(t("closingLine"))}</p>` : ""}
   `;
@@ -837,7 +870,7 @@ function renderItemCard(item, compact) {
   if (kind === "practice-high") sourceLine = `<div class="item-source"><span class="ki-badge-inline" aria-label="${esc(t("kiBadgeAriaLabel"))}">${esc(t("kiBadge"))}</span>${esc(t("fromPractice", state.ctx.practice_name))}</div>`;
   if (kind === "practice-low") sourceLine = `<div class="item-source"><span class="ki-badge-inline" aria-label="${esc(t("kiBadgeAriaLabel"))}">${esc(t("kiBadge"))}</span>${esc(t("fromPractice", state.ctx.practice_name))}<span class="chip hedge">${esc(t("hedge"))}</span></div>`;
   if (kind === "note") sourceLine = `<div class="item-source"><span class="ki-badge-inline" aria-label="${esc(t("kiBadgeAriaLabel"))}">${esc(t("kiBadge"))}</span>${esc(t("fromNote"))}</div>`;
-  if (kind === "unclear") sourceLine = `<div class="item-source">${esc(t("unclearNote"))}</div>`;
+  if (kind === "unclear") sourceLine = `<div class="item-source">${esc(t("unclearNote"))}<span class="chip hedge">${esc(t("hedge"))}</span></div>`;
 
   let quote = "";
   if (isAi) {
