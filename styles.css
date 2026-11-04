@@ -346,7 +346,7 @@ button.action-card:hover { background: var(--surface-page); }
 /* Title is the only bold, dark text in the card; everything else below it
    steps down in size/weight/color. Tight spacing title → source → quote,
    more space before the reminder line. */
-.item-title { font-size: 14px; font-weight: 700; color: var(--ink-black); line-height: 1.4; margin-bottom: 2px; }
+.item-title { font-size: 14px; font-weight: 700; color: var(--ink-black); line-height: 1.4; margin-bottom: 6px; }
 
 .item-source {
   display: flex;
